@@ -356,9 +356,9 @@ function buildLevel(){
   for(const[x,y,l,r]of ed)enemies.push(new Enemy(x,y,l,r));
 
   // Items
-  const evoI=new Item(1700,GROUND-4*STEP_H-50,'E',g=>`rgb(${g},255,${g})`,'#b4783c',0);
-  const togI=new Item(2500,sY-50,'T',g=>`rgb(${g},${g},255)`,'#4678d2',1.5);
-  const bliI=new Item(dSX+2*STEP_W+100,GROUND-4*STEP_H-50,'B',g=>`rgb(${g},120,255)`,'#8250aa',3.0);
+  const foxI=new Item(1700,GROUND-4*STEP_H-50,'E',g=>`rgb(${g},255,${g})`,'#b4783c',0);
+  const eggI=new Item(2500,sY-50,'T',g=>`rgb(${g},${g},255)`,'#4678d2',1.5);
+  const batI=new Item(dSX+2*STEP_W+100,GROUND-4*STEP_H-50,'B',g=>`rgb(${g},120,255)`,'#8250aa',3.0);
 
   // Coins
   const cp=[
@@ -380,7 +380,7 @@ function buildLevel(){
   const flag=new Flag(fEX+700,GROUND);
   const clouds=[];for(let i=0;i<20;i++)clouds.push(new Cloud(randInt(0,6000),randInt(20,120),randInt(60,120)));
 
-  return{plats,enemies,coins,flag,clouds,water,dragon,evoI,togI,bliI};
+  return{plats,enemies,coins,flag,clouds,water,dragon,foxI,eggI,batI};
 }
 
 // --- Platform Drawing ---
@@ -392,13 +392,13 @@ function drawPlat(p,cam){
 
 // --- Game State ---
 let state='title',won=false,tick=0;
-let player,plats,enemies,coins,flag,clouds,waterZones,dragon,evoI,togI,bliI;
+let player,plats,enemies,coins,flag,clouds,waterZones,dragon,foxI,eggI,batI;
 
 function startGame(){
   player=new Player(50,H-120);
   const lv=buildLevel();
   plats=lv.plats;enemies=lv.enemies;coins=lv.coins;flag=lv.flag;clouds=lv.clouds;
-  waterZones=lv.water;dragon=lv.dragon;evoI=lv.evoI;togI=lv.togI;bliI=lv.bliI;
+  waterZones=lv.water;dragon=lv.dragon;foxI=lv.foxI;eggI=lv.eggI;batI=lv.batI;
   tick=0;won=false;state='playing';atkQueued=false;
   stats.reset();
 }
@@ -447,9 +447,9 @@ function updateGame(){
   // Coins
   for(const c of coins)if(!c.collected&&player.rect.hit(c.rect)){c.collected=true;player.score+=50;stats.coinsCollected++}
   // Items
-  if(!evoI.collected&&player.rect.hit(evoI.rect)){evoI.collected=true;player.form='fox';player.score+=200;stats.formsCollected.push('fox')}
-  if(!togI.collected&&player.rect.hit(togI.rect)){togI.collected=true;player.form='egg';player.score+=200;stats.formsCollected.push('egg')}
-  if(!bliI.collected&&player.rect.hit(bliI.rect)){bliI.collected=true;player.form='bat';player.score+=200;stats.formsCollected.push('bat')}
+  if(!foxI.collected&&player.rect.hit(foxI.rect)){foxI.collected=true;player.form='fox';player.score+=200;stats.formsCollected.push('fox')}
+  if(!eggI.collected&&player.rect.hit(eggI.rect)){eggI.collected=true;player.form='egg';player.score+=200;stats.formsCollected.push('egg')}
+  if(!batI.collected&&player.rect.hit(batI.rect)){batI.collected=true;player.form='bat';player.score+=200;stats.formsCollected.push('bat')}
   // Water
   for(const w of waterZones){if(player.rect.hit(w.rect)){player.lives--;stats.deaths++;stats.waterDeaths++;if(player.lives<=0){state='gameover';won=false;stats.finalize(player,false);stats.publish();return}respawn();break}}
   // Fall
@@ -469,7 +469,7 @@ function drawGame(){
   for(const p of plats)drawPlat(p,cam);
   for(const w of waterZones)w.draw(cam,tick);
   dragon.draw(cam,tick);
-  evoI.draw(cam,tick);togI.draw(cam,tick);bliI.draw(cam,tick);
+  foxI.draw(cam,tick);eggI.draw(cam,tick);batI.draw(cam,tick);
   for(const c of coins)c.draw(cam,tick);
   for(const e of enemies)e.draw(cam);
   flag.draw(cam);

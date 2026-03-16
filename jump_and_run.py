@@ -27,10 +27,10 @@ BROWN = (139, 90, 43)
 WATER_DARK = (0, 80, 180)
 WATER_LIGHT = (30, 120, 220)
 WATER_SURFACE = (80, 170, 255)
-PIKA_YELLOW = (255, 220, 40)
-PIKA_DARK = (200, 170, 0)
-PIKA_CHEEK = (230, 80, 60)
-PIKA_EAR_TIP = (40, 30, 20)
+HERO_YELLOW = (255, 220, 40)
+HERO_DARK = (200, 170, 0)
+HERO_CHEEK = (230, 80, 60)
+HERO_EAR_TIP = (40, 30, 20)
 ENEMY_CREAM = (245, 235, 210)
 ENEMY_DARK = (180, 160, 120)
 ENEMY_BROWN = (130, 90, 50)
@@ -366,7 +366,7 @@ class Player:
 
         # Tail (lightning bolt shape behind body)
         tail_x = cx - f * 20
-        pygame.draw.polygon(surface, PIKA_DARK, [
+        pygame.draw.polygon(surface, HERO_DARK, [
             (tail_x, y + 10),
             (tail_x - f * 6, y + 2),
             (tail_x - f * 2, y + 8),
@@ -377,25 +377,25 @@ class Player:
         ])
 
         # Ears (tall pointy triangles)
-        pygame.draw.polygon(surface, PIKA_YELLOW, [
+        pygame.draw.polygon(surface, HERO_YELLOW, [
             (x + 4, y + 8), (x + 2, y - 14), (x + 14, y + 4)
         ])
-        pygame.draw.polygon(surface, PIKA_EAR_TIP, [
+        pygame.draw.polygon(surface, HERO_EAR_TIP, [
             (x + 3, y - 10), (x + 2, y - 14), (x + 8, y - 4)
         ])
-        pygame.draw.polygon(surface, PIKA_YELLOW, [
+        pygame.draw.polygon(surface, HERO_YELLOW, [
             (x + 22, y + 4), (x + 34, y - 14), (x + 32, y + 8)
         ])
-        pygame.draw.polygon(surface, PIKA_EAR_TIP, [
+        pygame.draw.polygon(surface, HERO_EAR_TIP, [
             (x + 28, y - 4), (x + 34, y - 14), (x + 33, y - 10)
         ])
 
         # Body (round yellow)
-        pygame.draw.ellipse(surface, PIKA_YELLOW, (x + 2, y + 8, 32, 34))
-        pygame.draw.ellipse(surface, PIKA_DARK, (x + 2, y + 8, 32, 34), 2)
+        pygame.draw.ellipse(surface, HERO_YELLOW, (x + 2, y + 8, 32, 34))
+        pygame.draw.ellipse(surface, HERO_DARK, (x + 2, y + 8, 32, 34), 2)
 
         # Head
-        pygame.draw.ellipse(surface, PIKA_YELLOW, (x + 4, y + 4, 28, 22))
+        pygame.draw.ellipse(surface, HERO_YELLOW, (x + 4, y + 4, 28, 22))
 
         # Eyes
         le_x = cx - 7
@@ -407,18 +407,18 @@ class Player:
         pygame.draw.circle(surface, WHITE, (re_x + f, ey - 1), 2)
 
         # Nose
-        pygame.draw.circle(surface, PIKA_DARK, (cx, y + 17), 1)
+        pygame.draw.circle(surface, HERO_DARK, (cx, y + 17), 1)
 
         # Mouth
-        pygame.draw.arc(surface, PIKA_DARK, (cx - 4, y + 16, 8, 6), 3.14, 6.28, 1)
+        pygame.draw.arc(surface, HERO_DARK, (cx - 4, y + 16, 8, 6), 3.14, 6.28, 1)
 
         # Red cheeks
-        pygame.draw.circle(surface, PIKA_CHEEK, (x + 5, y + 18), 4)
-        pygame.draw.circle(surface, PIKA_CHEEK, (x + 31, y + 18), 4)
+        pygame.draw.circle(surface, HERO_CHEEK, (x + 5, y + 18), 4)
+        pygame.draw.circle(surface, HERO_CHEEK, (x + 31, y + 18), 4)
 
         # Feet
-        pygame.draw.ellipse(surface, PIKA_DARK, (x + 5, y + 38, 10, 6))
-        pygame.draw.ellipse(surface, PIKA_DARK, (x + 21, y + 38, 10, 6))
+        pygame.draw.ellipse(surface, HERO_DARK, (x + 5, y + 38, 10, 6))
+        pygame.draw.ellipse(surface, HERO_DARK, (x + 21, y + 38, 10, 6))
 
 
 class Enemy:

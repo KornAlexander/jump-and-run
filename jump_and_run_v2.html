@@ -723,9 +723,9 @@ function buildLevel() {
   ];
   for (const [x, y, l, r] of ed) enemies.push(new Enemy(x, y, l, r));
 
-  const evoI = new CollectItem(1700, GROUND - 4 * STEP_H - 55, 'E', 30, 'fox');
-  const togI = new CollectItem(2500, sY - 55, 'T', 210, 'egg');
-  const bliI = new CollectItem(dSX + 2 * STEP_W + 100, GROUND - 4 * STEP_H - 55, 'B', 280, 'bat');
+  const foxI = new CollectItem(1700, GROUND - 4 * STEP_H - 55, 'E', 30, 'fox');
+  const eggI = new CollectItem(2500, sY - 55, 'T', 210, 'egg');
+  const batI = new CollectItem(dSX + 2 * STEP_W + 100, GROUND - 4 * STEP_H - 55, 'B', 280, 'bat');
 
   const cp = [
     [150, GROUND - 30], [250, GROUND - 30], [380, GROUND - 30], [700, GROUND - 30], [780, GROUND - 30],
@@ -747,7 +747,7 @@ function buildLevel() {
   const clouds = [];
   for (let i = 0; i < 18; i++) clouds.push(new Cloud(rnd(0, 6500), rnd(30, 150), rnd(50, 120)));
 
-  return { plats, enemies, coins, flag, clouds, water, dragon, evoI, togI, bliI };
+  return { plats, enemies, coins, flag, clouds, water, dragon, foxI, eggI, batI };
 }
 
 // ===== HUD =====
@@ -815,7 +815,7 @@ function drawHUD(player, tick) {
 
 // ===== GAME STATE =====
 let state = 'title', won = false, tick = 0;
-let player, plats, enemies, coins, flag, clouds, waterZones, dragon, evoI, togI, bliI;
+let player, plats, enemies, coins, flag, clouds, waterZones, dragon, foxI, eggI, batI;
 let camX = 0, targetCamX = 0;
 let titleAnim = 0;
 
@@ -824,7 +824,7 @@ function startGame() {
   player = new Player(50, H - 130);
   const lv = buildLevel();
   plats = lv.plats; enemies = lv.enemies; coins = lv.coins; flag = lv.flag; clouds = lv.clouds;
-  waterZones = lv.water; dragon = lv.dragon; evoI = lv.evoI; togI = lv.togI; bliI = lv.bliI;
+  waterZones = lv.water; dragon = lv.dragon; foxI = lv.foxI; eggI = lv.eggI; batI = lv.batI;
   tick = 0; won = false; state = 'playing'; atkQueued = false; camX = 0; particles.length = 0;
 }
 
@@ -962,7 +962,7 @@ function updateGame() {
   }
 
   // Items
-  for (const item of [evoI, togI, bliI]) {
+  for (const item of [foxI, eggI, batI]) {
     if (!item.collected && player.rect.hit(item.rect)) {
       item.collected = true; player.form = item.formName; player.score += 200; sfxItem();
       emit(item.rect.cx, item.rect.cy, 20, 1.5, 3, 25, 3, `hsl(${item.hue},70%,60%)`, -0.02);
@@ -1014,7 +1014,7 @@ function drawGame() {
   for (const p of plats) drawPlatform(p, camX, tick);
   for (const w of waterZones) w.draw(camX, tick);
   dragon.draw(camX, tick);
-  evoI.draw(camX, tick); togI.draw(camX, tick); bliI.draw(camX, tick);
+  foxI.draw(camX, tick); eggI.draw(camX, tick); batI.draw(camX, tick);
   for (const c of coins) c.draw(camX, tick);
   for (const e of enemies) e.draw(camX, tick);
   flag.draw(camX, tick);
