@@ -2,6 +2,8 @@
 
 A vibe-coded jump & run game that runs inside a Microsoft Fabric notebook.
 
+📝 **Blog post:** [Jump & Run — Fabric for Kids](https://actionablereporting.com/2026/03/16/jump-and-run-fabric-for-kids/)
+
 ## The Story
 
 My kids and I built this game over the weekend. It started as a **Python/Pygame** script, but I wanted to embed it into Microsoft Fabric — so I switched to **HTML5 Canvas**. Embedding was one line:
