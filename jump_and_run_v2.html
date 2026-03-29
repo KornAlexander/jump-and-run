@@ -69,6 +69,7 @@ const FORM_DATA = {
   shellbit:  {name:'Shellbit',  color:'#50a8e0', atk:'water',   evolve:'tideturtle', fly:0},
   tideturtle:{name:'Tideturtle',color:'#3888c0', atk:'water',   evolve:'torrentank', fly:0},
   torrentank:{name:'Torrentank',color:'#2060a0', atk:'water',   evolve:null,         fly:0},
+  bigrest:   {name:'Bigrest',   color:'#2d5f6f', atk:'wave',    evolve:null,         fly:0},
 };
 
 // ===== LEVEL CONFIGS =====
@@ -134,7 +135,7 @@ const stats = {
 // ===== INPUT =====
 const keys={};
 let atkQueued=false, anyKey=false, playerName='';
-let unlockedForms=['sparky'];
+let unlockedForms=['sparky','bigrest'];
 const nameInput=document.getElementById('playerNameInput');
 const nameContainer=document.getElementById('nameContainer');
 cv.addEventListener('keydown',e=>{keys[e.code]=true; if(e.code==='KeyF')atkQueued=true; anyKey=true; e.preventDefault();});
@@ -270,6 +271,7 @@ class Player {
       case'infernox':this._dInfernox(tick);break;
       case'shellbit':this._dShellbit(tick);break;case'tideturtle':this._dTideturtle(tick);break;
       case'torrentank':this._dTorrentank(tick);break;
+      case'bigrest':this._dBigrest(tick);break;
       default:this._dSparky(tick);
     }
     ctx.restore();
@@ -663,6 +665,40 @@ class Player {
     // Determined mouth
     dLine(14,14+b,26,14+b,'#103060',2);
     dLine(14,14+b,12,12+b,'#103060',1);dLine(26,14+b,28,12+b,'#103060',1);
+  }
+
+  // ===== BIGREST (large sleepy creature - always available) =====
+  _dBigrest(tick){
+    const b=round(sin(tick*0.03)*1); // Slow breathing animation
+    // Large round body
+    fEll(2,10+b,36,32,linGrad(2,10,38,42,[[0,'#3a7a8a'],[0.4,'#2d5f6f'],[1,'#1d4f5f']]));
+    // Belly patch
+    fEll(8,16+b,24,20,'rgba(230,240,245,0.3)');
+    // Thick arms
+    fEll(-2,16+b,12,16,'#2d5f6f');fEll(30,16+b,12,16,'#2d5f6f');
+    // Small feet
+    fEll(6,38+b,10,8,'#1d4f5f');fEll(24,38+b,10,8,'#1d4f5f');
+    // Large head
+    fEll(4,-2+b,32,24,radGrad(20,10+b,2,18,'#4a8a9a','#2d5f6f'));
+    // Small ears
+    fCir(4,2+b,5,'#2d5f6f');fCir(36,2+b,5,'#2d5f6f');
+    // Closed sleepy eyes (horizontal lines)
+    ctx.strokeStyle='#1a3a4a';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(12,8+b);ctx.lineTo(18,8+b);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(22,8+b);ctx.lineTo(28,8+b);ctx.stroke();
+    // Tiny highlights on closed eyes
+    dLine(13,7+b,15,7+b,'rgba(255,255,255,0.3)',1);
+    dLine(23,7+b,25,7+b,'rgba(255,255,255,0.3)',1);
+    // Content smile
+    ctx.strokeStyle='#1a3a4a';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(20,14+b,6,0.2,PI-0.2);ctx.stroke();
+    // Small nose
+    fCir(20,11+b,2,'#1a3a4a');
+    // Sleepiness indicator (Z's)
+    ctx.save();ctx.globalAlpha=0.3+sin(tick*0.08)*0.2;
+    dText('Z',14,32,-4+b,'rgba(255,255,255,0.4)',false,false,false);
+    dText('z',10,36,2+b,'rgba(255,255,255,0.3)',false,false,false);
+    ctx.restore();
   }
 
   // ===== ATTACK: THUNDER =====
@@ -1090,8 +1126,8 @@ function drawHUD(player,tick){
     if(i<player.flyCharges){fCir(fx,fy,5,fc);ctx.save();ctx.globalAlpha=0.4;fCir(fx-1,fy-1,2,'#fff');ctx.restore();}
     else sCir(fx,fy,5,'rgba(255,255,255,0.2)',1);}
     dText('X',10,W-70-player.maxFlyCharges*16+2,24,fc,false,false,true);}
-  // R switch indicator (L11+)
-  if(currentLevel>=11&&unlockedForms.length>1){
+  // R switch indicator (always available)
+  if(unlockedForms.length>1){
     ctx.save();ctx.globalAlpha=0.6+sin(tick*0.08)*0.15;
     fRRect(W/2+140,14,60,30,6,'rgba(255,255,255,0.08)');
     dText('R:Switch',9,W/2+170,29,'#90caf9',true,false,true);ctx.restore();}
@@ -1142,7 +1178,7 @@ function advanceLevel(){
   loadLevel();player.score=savedScore;player.lives=savedLives;
 }
 function switchForm(){
-  if(currentLevel<11||unlockedForms.length<=1)return;
+  if(unlockedForms.length<=1)return;
   const idx=unlockedForms.indexOf(player.form);
   const next=(idx+1)%unlockedForms.length;
   player.form=unlockedForms[next];
@@ -1164,7 +1200,7 @@ function drawTitle(tick){
   ctx.save();ctx.shadowColor='#ffd700';ctx.shadowBlur=30*glow;
   dText('ADVENTURE',24,W/2,100,'#ffd700',true,true,true);dText('JUMP & RUN',52,W/2,145,'#fff',true,true,true);ctx.shadowBlur=0;ctx.restore();
   dText('EVOLUTION EDITION — 16 Levels',14,W/2,185,'rgba(255,215,0,0.6)',true,false,true);
-  const controls=[['Arrow Keys / WASD','Move'],['Space / Up / W','Jump'],['F','Attack'],['X','Fly (when available)'],['R','Switch form (L11+)'],['Stomp enemies','from above!']];
+  const controls=[['Arrow Keys / WASD','Move'],['Space / Up / W','Jump'],['F','Attack'],['X','Fly (when available)'],['R','Switch form'],['Stomp enemies','from above!']];
   let cy=230;
   for(const[key,desc]of controls){fRRect(W/2-180,cy-4,360,26,6,'rgba(255,255,255,0.05)');
     dText(key,14,W/2-10,cy+9,'#90caf9',true,false,true);dText(desc,12,W/2+100,cy+9,'rgba(255,255,255,0.6)',false,false,false);cy+=30;}
@@ -1221,8 +1257,8 @@ function updateGame(){
   const allP=plats.concat([dragon.rect]);
   player.update(allP);
   if(atkQueued){player.attack();atkQueued=false;}
-  // R-key form switching (L11+)
-  if(keys.KeyR&&currentLevel>=11){switchForm();keys.KeyR=false;}
+  // R-key form switching
+  if(keys.KeyR){switchForm();keys.KeyR=false;}
   for(const e of enemies)e.update();
   // Enemy collision
   for(const e of enemies){if(!e.alive)continue;
@@ -1230,7 +1266,11 @@ function updateGame(){
       e.alive=false;player.score+=100;sfxStomp();stats.enemiesZapped++;
       emit(e.rect.cx,e.rect.cy,15,1,3,20,3,'#ffd700',0.05);shake(3,6);continue;}
     if(player.rect.hit(e.rect)){
-      if(player.vy>0&&player.rect.b-e.rect.t<22){
+      // Bigrest crushes enemies by walking into them
+      if(player.form==='bigrest'){
+        e.alive=false;player.score+=100;sfxStomp();stats.enemiesStomped++;
+        emit(e.rect.cx,e.rect.cy,12,1,2.5,18,3,'#ffd700',0.05);shake(3,6);
+      }else if(player.vy>0&&player.rect.b-e.rect.t<22){
         e.alive=false;player.vy=JUMP_FORCE*0.6;player.score+=100;sfxStomp();stats.enemiesStomped++;
         emit(e.rect.cx,e.rect.cy,12,1,2.5,18,3,'#ffd700',0.05);
       }else if(player.invincible<=0){
