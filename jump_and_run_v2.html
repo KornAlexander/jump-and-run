@@ -1112,13 +1112,21 @@ function generateLevel(lvlIdx){
   // Flag
   const flag=new Flag(x+bossW-100,GROUND);
 
-  // Distribute enemies
+  // Distribute enemies (avoid gaps)
   const totalW=x+bossW;const eCount=cfg.enemies;
   const eZone=totalW-200;
+  // Collect all gap zones to avoid
+  const gapZones=[];
+  for(const w of waterZones)gapZones.push({l:w.rect.x,r:w.rect.x+w.rect.w});
+  for(const lv of lavaArr)gapZones.push({l:lv.rect.x,r:lv.rect.x+lv.rect.w});
+  gapZones.push({l:dragon.minX,r:dragon.maxX});
   for(let i=0;i<eCount;i++){
-    const ex=150+floor(i*eZone/eCount);const ey=GROUND-34;
+    const ex=150+floor(i*eZone/eCount);
+    // Skip if enemy would be in a gap
+    let inGap=false;for(const g of gapZones)if(ex>=g.l&&ex<=g.r){inGap=true;break;}
+    if(inGap)continue;
+    const ey=GROUND-34;
     const lb=max(0,ex-100),rb=min(totalW,ex+150);
-    // Find platform height at ex
     let onPlat=false;
     for(const p of plats){if(ex>=p.x&&ex<=p.x+p.w&&p.t<=GROUND){
       enemies.push(new Enemy(ex,p.t-34,max(p.x,ex-80),min(p.x+p.w,ex+80),eSpd));onPlat=true;break;}}
