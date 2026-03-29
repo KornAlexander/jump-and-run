@@ -40,6 +40,7 @@ function sfxThunder(){ for(let i=0;i<4;i++) setTimeout(()=>playTone(80+Math.rand
 function sfxWave(){ playTone(300,0.2,'sine',0.04); setTimeout(()=>playTone(250,0.25,'sine',0.03),80); }
 function sfxFire(){ playTone(200,0.2,'sawtooth',0.06); setTimeout(()=>playTone(150,0.15,'sawtooth',0.04),50); }
 function sfxWater(){ playTone(400,0.15,'sine',0.05); setTimeout(()=>playTone(500,0.2,'sine',0.04),60); }
+function sfxGuitar(){ playTone(82,0.08,'sawtooth',0.1); setTimeout(()=>playTone(110,0.08,'sawtooth',0.08),40); setTimeout(()=>playTone(147,0.12,'sawtooth',0.09),80); setTimeout(()=>playTone(196,0.15,'sawtooth',0.07),140); }
 function sfxItem(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>playTone(f,0.12,'square',0.04),i*80)); }
 function sfxWin(){ [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>playTone(f,0.2,'sine',0.05),i*120)); }
 function sfxEvolve(){ [440,554,659,880,1047,1319].forEach((f,i)=>setTimeout(()=>playTone(f,0.25,'sine',0.06),i*150)); }
@@ -134,11 +135,11 @@ const stats = {
 
 // ===== INPUT =====
 const keys={};
-let atkQueued=false, anyKey=false, playerName='';
+let atkQueued=false, guitarAtkQueued=false, anyKey=false, playerName='';
 let unlockedForms=['sparky','bigrest'];
 const nameInput=document.getElementById('playerNameInput');
 const nameContainer=document.getElementById('nameContainer');
-cv.addEventListener('keydown',e=>{keys[e.code]=true; if(e.code==='KeyF')atkQueued=true; anyKey=true; e.preventDefault();});
+cv.addEventListener('keydown',e=>{keys[e.code]=true; if(e.code==='KeyF')atkQueued=true; if(e.code==='KeyG')guitarAtkQueued=true; anyKey=true; e.preventDefault();});
 cv.addEventListener('keyup',e=>{keys[e.code]=false; e.preventDefault();});
 cv.addEventListener('click',()=>{cv.focus();initAudio();anyKey=true;});
 nameInput.addEventListener('keydown',e=>{
@@ -214,6 +215,7 @@ class Player {
     this.lives=3;this.maxLives=3;this.score=0;
     this.facingRight=true;this.form='sparky';
     this.atkTimer=0;this.atkCd=0;this.atkRect=null;
+    this.guitarAtkTimer=0;this.guitarAtkCd=0;this.guitarAtkRect=null;
     this.runFrame=0;this.invincible=0;this.dustTimer=0;
     this.flyCharges=0;this.maxFlyCharges=0;
   }
@@ -240,6 +242,12 @@ class Player {
       this.atkRect=this.facingRight?new Rect(this.rect.r,this.rect.cy-ATK_H/2,ATK_W,ATK_H)
         :new Rect(this.rect.l-ATK_W,this.rect.cy-ATK_H/2,ATK_W,ATK_H);
     }else this.atkRect=null;
+    if(this.guitarAtkCd>0)this.guitarAtkCd--;
+    if(this.guitarAtkTimer>0){this.guitarAtkTimer--;
+      const gw=ATK_W*1.5,gh=ATK_H*1.3;
+      this.guitarAtkRect=this.facingRight?new Rect(this.rect.r,this.rect.cy-gh/2,gw,gh)
+        :new Rect(this.rect.l-gw,this.rect.cy-gh/2,gw,gh);
+    }else this.guitarAtkRect=null;
     if(this.invincible>0)this.invincible--;
     if(dx!==0)this.runFrame+=0.25;else this.runFrame=0;
     if(abs(dx)>0&&this.onGround){this.dustTimer++;
@@ -251,6 +259,11 @@ class Player {
     this.atkTimer=ATK_DUR;this.atkCd=ATK_CD;stats.attacks++;
     const a=(FORM_DATA[this.form]||{}).atk||'wave';
     if(a==='thunder')sfxThunder();else if(a==='fire')sfxFire();else if(a==='water')sfxWater();else sfxWave();
+  }
+  guitarAttack(){
+    if(this.guitarAtkCd>0||this.guitarAtkTimer>0)return;
+    this.guitarAtkTimer=28;this.guitarAtkCd=45;stats.attacks++;
+    sfxGuitar();
   }
   _cx(dx,ps){for(const p of ps)if(this.rect.hit(p)){if(dx>0)this.rect.r=p.l;else if(dx<0)this.rect.l=p.r;}}
   _cy(ps){this.onGround=false;for(const p of ps)if(this.rect.hit(p)){if(this.vy>0){this.rect.b=p.t;this.vy=0;this.onGround=true;}else if(this.vy<0){this.rect.t=p.b;this.vy=0;}}}
@@ -282,6 +295,7 @@ class Player {
       else if(a==='water')this._drawWaterAtk(cam,tick);
       else this._drawWave(cam,tick);
     }
+    if(this.guitarAtkTimer>0&&this.guitarAtkRect)this._drawGuitar(cam,tick);
   }
 
   // ===== SPARKY (yellow electric mouse) =====
@@ -699,6 +713,46 @@ class Player {
     dText('Z',14,32,-4+b,'rgba(255,255,255,0.4)',false,false,false);
     dText('z',10,36,2+b,'rgba(255,255,255,0.3)',false,false,false);
     ctx.restore();
+  }
+
+  // ===== ATTACK: ELECTRIC GUITAR (for bosses) =====
+  _drawGuitar(cam,tick){
+    const prog=1-this.guitarAtkTimer/28,swing=sin(prog*PI)*30;
+    const gx=this.guitarAtkRect.x-cam+(this.facingRight?20:-20),gy=this.guitarAtkRect.cy-20;
+    ctx.save();
+    ctx.translate(gx,gy);
+    ctx.rotate((this.facingRight?1:-1)*(swing*PI/180));
+    // Guitar body (V-shape)
+    ctx.fillStyle=linGrad(-15,-10,15,10,[[0,'#1a1a2e'],[0.5,'#2a2a3e'],[1,'#1a1a2e']]);
+    ctx.beginPath();
+    ctx.moveTo(0,-18);ctx.lineTo(-12,0);ctx.lineTo(-10,8);ctx.lineTo(10,8);ctx.lineTo(12,0);ctx.closePath();
+    ctx.fill();
+    // Pickups
+    fRect(-6,-2,3,6,'#c0c0c0');fRect(3,-2,3,6,'#c0c0c0');
+    // Strings
+    for(let i=0;i<6;i++){const sy=-12+i*4;
+      dLine(-10,sy,10,sy,'rgba(200,200,200,0.6)',0.5);}
+    // Neck
+    fRect(-2,-18,4,10,'#5a4030');
+    // Headstock
+    fRect(-4,-24,8,6,linGrad(-4,-24,4,-18,[[0,'#3a2820'],[1,'#5a4030']]));
+    // Tuning pegs
+    for(let i=0;i<3;i++){fCir(-3,-22+i*2,1,'#808080');fCir(3,-22+i*2,1,'#808080');}
+    // Lightning/energy effect
+    ctx.globalAlpha=0.7*(1-prog);
+    for(let i=0;i<8;i++){
+      const ex=random()*24-12,ey=random()*16-8;
+      fCir(ex,ey,2+random()*3,'#ffff00');
+    }
+    // Sound waves
+    ctx.strokeStyle='rgba(255,200,0,'+((1-prog)*0.5)+')';
+    ctx.lineWidth=2;
+    for(let r=10;r<40;r+=10){
+      ctx.beginPath();ctx.arc(0,0,r+(prog*20),0,PI*2);ctx.stroke();
+    }
+    ctx.restore();
+    if(prog<0.3&&this.guitarAtkTimer%2===0)
+      emit(this.guitarAtkRect.cx,this.guitarAtkRect.cy,3,1.5,2,12,3,'#ffff00',0);
   }
 
   // ===== ATTACK: THUNDER =====
@@ -1152,7 +1206,7 @@ function loadLevel(){
   const lv=generateLevel(currentLevel-1);
   plats=lv.plats;enemies=lv.enemies;coins=lv.coins;flag=lv.flag;clouds=lv.clouds;
   waterZones=lv.water;dragon=lv.dragon;foxI=lv.foxI;eggI=lv.eggI;batI=lv.batI;
-  tick=0;won=false;state='playing';atkQueued=false;camX=0;particles.length=0;
+  tick=0;won=false;state='playing';atkQueued=false;guitarAtkQueued=false;camX=0;particles.length=0;
   player.rect.x=50;player.rect.y=H-130;player.vy=0;
   const fd=FORM_DATA[player.form]||{};
   player.maxFlyCharges=fd.fly||0;player.flyCharges=player.maxFlyCharges;
@@ -1200,7 +1254,7 @@ function drawTitle(tick){
   ctx.save();ctx.shadowColor='#ffd700';ctx.shadowBlur=30*glow;
   dText('ADVENTURE',24,W/2,100,'#ffd700',true,true,true);dText('JUMP & RUN',52,W/2,145,'#fff',true,true,true);ctx.shadowBlur=0;ctx.restore();
   dText('EVOLUTION EDITION — 16 Levels',14,W/2,185,'rgba(255,215,0,0.6)',true,false,true);
-  const controls=[['Arrow Keys / WASD','Move'],['Space / Up / W','Jump'],['F','Attack'],['X','Fly (when available)'],['R','Switch form'],['Stomp enemies','from above!']];
+  const controls=[['Arrow Keys / WASD','Move'],['Space / Up / W','Jump'],['F','Attack'],['G','Guitar (vs Boss)'],['X','Fly (when available)'],['R','Switch form']];
   let cy=230;
   for(const[key,desc]of controls){fRRect(W/2-180,cy-4,360,26,6,'rgba(255,255,255,0.05)');
     dText(key,14,W/2-10,cy+9,'#90caf9',true,false,true);dText(desc,12,W/2+100,cy+9,'rgba(255,255,255,0.6)',false,false,false);cy+=30;}
@@ -1257,6 +1311,7 @@ function updateGame(){
   const allP=plats.concat([dragon.rect]);
   player.update(allP);
   if(atkQueued){player.attack();atkQueued=false;}
+  if(guitarAtkQueued){player.guitarAttack();guitarAtkQueued=false;}
   // R-key form switching
   if(keys.KeyR){switchForm();keys.KeyR=false;}
   for(const e of enemies)e.update();
@@ -1288,6 +1343,11 @@ function updateGame(){
       const killed=boss.hit();
       if(killed){player.score+=500;sfxStomp();stats.bossesKilled++;emit(boss.rect.cx,boss.rect.cy,25,1.5,4,25,4,'#ffd700',0.05);shake(6,15);}
       else{sfxStomp();shake(3,6);emit(boss.rect.cx,boss.rect.cy,8,1,2,12,2,'#ff4040',0.03);}}
+    // Guitar attack on boss
+    if(player.guitarAtkRect&&player.guitarAtkTimer>0&&boss.rect.hit(player.guitarAtkRect)){
+      const killed=boss.hit();
+      if(killed){player.score+=500;sfxStomp();stats.bossesKilled++;emit(boss.rect.cx,boss.rect.cy,30,2,5,30,5,'#ffff00',0.08);shake(8,20);}
+      else{sfxStomp();shake(5,10);emit(boss.rect.cx,boss.rect.cy,12,1.5,3,18,4,'#ffff00',0.05);}}
     if(player.rect.hit(boss.rect)){
       if(player.vy>0&&player.rect.b-boss.rect.t<22){
         const killed=boss.hit();player.vy=JUMP_FORCE*0.6;
