@@ -228,8 +228,8 @@ class Player {
       emit(this.rect.cx,this.rect.b,5,0.8,2,15,3,'rgba(255,255,255,0.6)',0.05);
     }
     const fd=FORM_DATA[this.form];
-    if(keys.KeyX&&fd&&fd.fly>0&&!this.onGround&&this.flyCharges>0){
-      this.vy=JUMP_FORCE*0.55;this.flyCharges--;keys.KeyX=false;
+    if(keys.KeyX&&fd&&fd.fly>0&&this.flyCharges>0){
+      this.vy=JUMP_FORCE*0.7;this.flyCharges--;this.onGround=false;keys.KeyX=false;
       playTone(500+(this.maxFlyCharges-this.flyCharges)*60,0.08,'sine',0.04);
       emit(this.rect.cx,this.rect.b,4,1,1.5,12,2,'rgba(160,100,220,0.6)',0.03);
     }
@@ -1195,7 +1195,7 @@ let completeTimer=0,evolutionFrom=null,evolutionTo=null;
 
 function startGame(){
   initAudio();currentLevel=1;stats.reset();
-  unlockedForms=['sparky'];
+  unlockedForms=['sparky','bigrest'];
   player=new Player(50,H-130);
   player.form=LEVELS[0].form;
   if(!unlockedForms.includes(player.form))unlockedForms.push(player.form);
