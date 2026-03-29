@@ -1316,7 +1316,7 @@ function loop(){
     if((anyKey&&completeTimer>30)||completeTimer>240){anyKey=false;advanceLevel();}
   }else if(state==='gameover'){
     drawGameOver(tick);tick++;
-    if(keys.KeyR){startGame();anyKey=false;winSfxPlayed=false;}
+    if(keys.KeyR){playerName='';state='title';anyKey=false;winSfxPlayed=false;}
     if(keys.KeyQ){state='title';anyKey=false;}
   }
   requestAnimationFrame(loop);
