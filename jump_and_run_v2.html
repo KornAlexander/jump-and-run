@@ -2399,8 +2399,8 @@ function updateGame(){
     if(player.godmode){respawn();}
     else{player.lives--;sfxHit();stats.deaths++;stats.fallDeaths++;
       if(player.lives<=0){state='gameover';won=false;stats.finalize(player,false);stats.publish();return;}respawn();}}
-  // Flag
-  if(player.rect.hit(flag.rect)&&(!boss||!boss.alive)){completeLevel();return;}
+  // Flag — boss must be cleared first, unless godmode is on (cheat stays finishable either way)
+  if(player.rect.hit(flag.rect)&&(!boss||!boss.alive||player.godmode)){completeLevel();return;}
   stats.maxXReached=Math.max(stats.maxXReached,player.rect.x);
   targetCamX=player.rect.cx-W/3;targetCamX=max(0,targetCamX);camX=lerp(camX,targetCamX,CAM_LERP);
   for(let i=particles.length-1;i>=0;i--){particles[i].update();if(particles[i].dead)particles.splice(i,1);}
