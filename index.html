@@ -103,6 +103,15 @@ const FORM_DATA = {
   bigrest:   {name:'Bigrest',   color:'#2d5f6f', atk:'wave',    evolve:null,         fly:0},
 };
 
+// ===== POWER / ELEMENT STYLES =====
+// Each element (form attack type) maps to an orb color + glyph for the per-level power item.
+const POWER_STYLE = {
+  thunder:{col:'#ffdc28', glow:'#fff6a0', letter:'T', label:'Thunder'},
+  wave:   {col:'#80d0f0', glow:'#d0f0ff', letter:'W', label:'Wave'},
+  water:  {col:'#3088d0', glow:'#a0d0f0', letter:'A', label:'Aqua'},
+  fire:   {col:'#ff5020', glow:'#ffc060', letter:'F', label:'Fire'},
+};
+
 // ===== STAGES + LEVEL CONFIGS =====
 // The game is split into themed main stages, each containing LEVELS_PER_STAGE
 // levels. The flat LEVELS table is generated from the STAGES model so difficulty
@@ -233,10 +242,39 @@ let unlockedForms=['sparky','bigrest'];
 const nameInput=document.getElementById('playerNameInput');
 const nameContainer=document.getElementById('nameContainer');
 // ===== CHEAT CODES =====
-// "leben" -> restore all lives (Leben = lives). "power" -> toggle invincibility. "L" + number -> jump to that level (L9 = level 9).
+// Typed words (no Enter needed):
+//   "leben"   -> restore all lives (Leben = lives)
+//   "power"   -> toggle invincibility (godmode); the level stays finishable either way
+//   "blitz"   -> switch to the Thunder power form
+//   "feuer"   -> switch to the Fire power form
+//   "wasser"  -> switch to the Water power form
+//   "welle"   -> switch to the Wave power form
+//   "fliegen" -> switch to a flying form with full flight charges
+// "L" + number -> jump to that level (L9 = level 9).
 const LEVEL_JUMP_TIMEOUT_MS=500; // commit a single-digit level jump this long after the digit is typed
 let cheatBuf='', lvlJumpBuf='', lvlJumpTimer=0, cheatMsg='', cheatMsgT=0;
 function flashCheat(msg){cheatMsg=msg;cheatMsgT=150;}
+// Switch the player to the first form whose attack matches the given element, and top up its flight charges.
+function setPowerForm(element){
+  if(!player)return;
+  const key=FORM_ORDER.find(f=>(FORM_DATA[f]||{}).atk===element);
+  if(!key)return;
+  player.form=key;
+  if(!unlockedForms.includes(key))unlockedForms.push(key);
+  const fd=FORM_DATA[key]||{};
+  player.maxFlyCharges=fd.fly||0;player.flyCharges=player.maxFlyCharges;
+  sfxItem();
+}
+// Switch the player to a flying form with full flight charges.
+function setFlyPower(){
+  if(!player)return;
+  const key='skyguard';
+  player.form=key;
+  if(!unlockedForms.includes(key))unlockedForms.push(key);
+  const fd=FORM_DATA[key]||{};
+  player.maxFlyCharges=fd.fly||0;player.flyCharges=player.maxFlyCharges;
+  sfxItem();
+}
 function commitLevelJump(){
   if(lvlJumpBuf){const n=parseInt(lvlJumpBuf,10);
     if(n>=1&&n<=LEVELS.length&&player){currentLevel=n;stats.levelReached=Math.max(stats.levelReached,n);
@@ -252,12 +290,19 @@ function handleCheatKey(e){
   if(e.code==='KeyL'){lvlJumpBuf='';lvlJumpTimer=performance.now();}
   else if(lvlJumpTimer&&/^[0-9]$/.test(e.key)){lvlJumpBuf+=e.key;lvlJumpTimer=performance.now();
     if(lvlJumpBuf.length>=2)commitLevelJump();return;}
-  // Cheats: "leben" refills all lives; "power" toggles invincibility. Both keep the level finishable.
-  if(/^[a-zA-Z]$/.test(e.key)){cheatBuf=(cheatBuf+e.key.toLowerCase()).slice(-5);
-    if(cheatBuf==='leben'&&player){player.lives=player.maxLives;cheatBuf='';
+  // Cheats: typed words. Buffer keeps the last 8 letters; matches use endsWith so
+  // longer words (wasser, fliegen) work. None of the words is a suffix of another.
+  if(/^[a-zA-Z]$/.test(e.key)){cheatBuf=(cheatBuf+e.key.toLowerCase()).slice(-8);
+    if(!player)return;
+    if(cheatBuf.endsWith('leben')){player.lives=player.maxLives;cheatBuf='';
       flashCheat('CHEAT: Lives restored');}
-    else if(cheatBuf==='power'&&player){player.godmode=!player.godmode;cheatBuf='';
-      flashCheat(player.godmode?'CHEAT: Invincible ON':'CHEAT: Invincible OFF');}}
+    else if(cheatBuf.endsWith('power')){player.godmode=!player.godmode;cheatBuf='';
+      flashCheat(player.godmode?'CHEAT: Invincible ON':'CHEAT: Invincible OFF');}
+    else if(cheatBuf.endsWith('blitz')){setPowerForm('thunder');cheatBuf='';flashCheat('CHEAT: Thunder power');}
+    else if(cheatBuf.endsWith('feuer')){setPowerForm('fire');cheatBuf='';flashCheat('CHEAT: Fire power');}
+    else if(cheatBuf.endsWith('wasser')){setPowerForm('water');cheatBuf='';flashCheat('CHEAT: Water power');}
+    else if(cheatBuf.endsWith('welle')){setPowerForm('wave');cheatBuf='';flashCheat('CHEAT: Wave power');}
+    else if(cheatBuf.endsWith('fliegen')){setFlyPower();cheatBuf='';flashCheat('CHEAT: Flight power');}}
 }
 cv.addEventListener('keydown',e=>{keys[e.code]=true; if(e.code==='KeyF')atkQueued=true; if(e.code==='KeyG')guitarAtkQueued=true; anyKey=true; handleCheatKey(e); e.preventDefault();});
 cv.addEventListener('keyup',e=>{keys[e.code]=false; e.preventDefault();});
@@ -1011,8 +1056,18 @@ class Lava {
   }
 }
 class CollectItem {
-  constructor(x,y,letter,hue,formName){this.rect=new Rect(x,y,28,28);this.collected=false;this.letter=letter;this.hue=hue;this.formName=formName;}
-  draw(cam,tick){if(this.collected)return;}
+  constructor(x,y,letter,col,element){this.rect=new Rect(x,y,28,28);this.collected=false;this.letter=letter;this.col=col;this.element=element;}
+  draw(cam,tick){
+    if(this.collected)return;
+    const bob=sin(tick*0.06)*5, cx=this.rect.cx-cam, cy=this.rect.cy+bob;
+    const pulse=0.55+sin(tick*0.09)*0.45;
+    const st=POWER_STYLE[this.element]||POWER_STYLE.wave;
+    ctx.save();ctx.globalAlpha=0.30*pulse;fCir(cx,cy,20,st.glow);ctx.restore();
+    ctx.save();ctx.globalAlpha=0.55;fCir(cx,cy,15,st.col);ctx.restore();
+    fCir(cx,cy,11,this.col);
+    ctx.save();ctx.globalAlpha=0.6;fCir(cx-3,cy-4,4,'#ffffff');ctx.restore();
+    dText(this.letter,15,cx,cy+6,'#ffffff',true,true,true);
+  }
 }
 
 // ===== DRAGON =====
@@ -1443,16 +1498,24 @@ function generateLevel(lvlIdx){
     for(let i=0;i<nc;i++){const cx=p.x+40+i*(p.w-80)/max(1,nc-1);coins.push(new Coin(cx,p.t-30));}
   }
 
-  // Dummy items (forms assigned by level config)
-  const foxI=new CollectItem(-100,-100,'',0,'');foxI.collected=true;
-  const eggI=new CollectItem(-100,-100,'',0,'');eggI.collected=true;
-  const batI=new CollectItem(-100,-100,'',0,'');batI.collected=true;
+  // One power orb per level, themed to the level's element, placed mid-path on a walkable platform.
+  const el=(FORM_DATA[cfg.form]||{}).atk||'wave';
+  const pst=POWER_STYLE[el]||POWER_STYLE.wave;
+  let powerItem;
+  if(walk.length){
+    const midX=bossStartX*0.5;
+    let best=walk[0],bd=Infinity;
+    for(const p of walk){const d=abs((p.x+p.w/2)-midX);if(d<bd){bd=d;best=p;}}
+    powerItem=new CollectItem(best.x+best.w/2-14,best.t-48,pst.letter,pst.col,el);
+  }else{
+    powerItem=new CollectItem(-100,-100,'',pst.col,el);powerItem.collected=true;
+  }
 
   // Clouds
   const clouds=[];for(let i=0;i<15;i++)clouds.push(new Cloud(rnd(0,totalW),rnd(30,150),rnd(50,120)));
 
   lavaZones=S.lavaArr;
-  return{plats,enemies,coins,flag,clouds,water:waterZones,dragon,foxI,eggI,batI};
+  return{plats,enemies,coins,flag,clouds,water:waterZones,dragon,powerItem};
 }
 
 // ===== HUD =====
@@ -1507,7 +1570,7 @@ function drawHUD(player,tick){
 
 // ===== GAME STATE =====
 let state='title',won=false,tick=0;
-let player,plats,enemies,coins,flag,clouds,waterZones,dragon,foxI,eggI,batI;
+let player,plats,enemies,coins,flag,clouds,waterZones,dragon,powerItem;
 let camX=0,targetCamX=0,titleAnim=0;
 let completeTimer=0,evolutionFrom=null,evolutionTo=null;
 
@@ -1547,7 +1610,7 @@ function loadLevel(){
   initBgElements();
   const lv=generateLevel(currentLevel-1);
   plats=lv.plats;enemies=lv.enemies;coins=lv.coins;flag=lv.flag;clouds=lv.clouds;
-  waterZones=lv.water;dragon=lv.dragon;foxI=lv.foxI;eggI=lv.eggI;batI=lv.batI;
+  waterZones=lv.water;dragon=lv.dragon;powerItem=lv.powerItem;
   tick=0;won=false;state='playing';atkQueued=false;guitarAtkQueued=false;camX=0;particles.length=0;
   player.rect.x=50;player.rect.y=H-130;player.vy=0;
   const fd=FORM_DATA[player.form]||{};
@@ -1754,6 +1817,15 @@ function updateGame(){
   for(const c of coins)if(!c.collected&&player.rect.hit(c.rect)){
     c.collected=true;player.score+=50;sfxCoin();stats.coinsCollected++;
     emit(c.rect.cx,c.rect.cy,8,0.8,2,15,2,'#ffd700',-0.02);}
+  // Power orb: temporary boost (fly refill + brief invincibility + score)
+  if(powerItem&&!powerItem.collected&&player.rect.hit(powerItem.rect)){
+    powerItem.collected=true;player.score+=200;
+    player.invincible=max(player.invincible,180);
+    player.flyCharges=player.maxFlyCharges=max(player.maxFlyCharges,3);
+    sfxItem();
+    const st=POWER_STYLE[powerItem.element]||POWER_STYLE.wave;
+    emit(powerItem.rect.cx,powerItem.rect.cy,16,1.2,2,22,3,st.col,-0.02);
+    flashCheat('POWER: '+st.label+' boost');}
   // Boss
   if(boss&&boss.alive){boss.update();
     if(player.atkRect&&player.atkTimer>0&&boss.rect.hit(player.atkRect)){
@@ -1810,6 +1882,7 @@ function drawGame(){
   for(const lv of lavaZones)lv.draw(camX,tick);
   dragon.draw(camX,tick);
   for(const c of coins)c.draw(camX,tick);
+  if(powerItem)powerItem.draw(camX,tick);
   for(const e of enemies)e.draw(camX,tick);
   if(boss&&boss.alive)boss.draw(camX,tick);
   flag.draw(camX,tick);
