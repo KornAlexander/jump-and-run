@@ -137,32 +137,33 @@ const FORM_ORDER = ['sparky','voltail','foxy','aquafox','egglet','winglet','skyg
   'fangwing','shadowbat','flameling','blazeclaw','infernox','shellbit','tideturtle','torrentank'];
 // All known layout archetypes (the whitelist of structural templates a level may use).
 const LAYOUT_ORDER = ['stairs','pits','islands','tower','gauntlet','river',
-  'bridges','ascent','chasm','ruins','cascade','causeway'];
+  'bridges','ascent','chasm','ruins','cascade','causeway',
+  'pyramid','moat','mesa','spiral','stepstones','archipelago'];
 // Per-stage layout sequences: each stage draws from its OWN curated mix and order
 // of archetypes so no two stages feel structurally alike (instead of every stage
 // cycling the same six shapes). Each row has LEVELS_PER_STAGE entries, every value
 // is a member of LAYOUT_ORDER, and difficulty params still ramp globally by level.
 const STAGE_LAYOUTS = [
-  // 0 Sunny Meadows  (gentle intro: sprints, gaps, hops)
-  ['causeway','stairs','islands','bridges','causeway','pits','islands','stairs','bridges','river'],
-  // 1 Whispering Forest (climbing + broken ground)
-  ['stairs','tower','ruins','islands','bridges','tower','ruins','ascent','islands','river'],
-  // 2 Scorching Desert (long runs + wide crossings)
-  ['causeway','pits','gauntlet','chasm','ruins','pits','gauntlet','causeway','chasm','river'],
-  // 3 Cloudtop Skies (air & verticality; no water/lava -> void gaps, never river)
-  ['islands','ascent','tower','bridges','islands','cascade','ascent','tower','islands','chasm'],
-  // 4 Murky Swamp (bridges & sunken crossings)
-  ['bridges','ruins','pits','river','bridges','chasm','ruins','river','causeway','river'],
-  // 5 Crystal Caverns (descents, towers, lava/water chasms)
-  ['cascade','tower','ruins','chasm','ascent','cascade','tower','ruins','chasm','river'],
-  // 6 Ember Volcano (lava chasms & gauntlets)
-  ['chasm','pits','gauntlet','river','chasm','cascade','pits','gauntlet','chasm','river'],
-  // 7 Frostbite Glacier (slippery descents & island hops)
-  ['cascade','islands','bridges','stairs','cascade','ruins','islands','bridges','cascade','river'],
-  // 8 Tideheart Ocean (water crossings everywhere)
-  ['river','bridges','chasm','islands','ruins','river','bridges','chasm','cascade','river'],
-  // 9 Twilight Expanse (finale: the hardest mix)
-  ['gauntlet','ascent','chasm','tower','ruins','cascade','gauntlet','chasm','ascent','chasm'],
+  // 0 Sunny Meadows  (gentle intro: sprints, friendly hops, a first climb + a grand pyramid)
+  ['causeway','stairs','islands','bridges','pyramid','pits','mesa','islands','causeway','stairs'],
+  // 1 Whispering Forest (vertical: towers, ruined pillars, corkscrew climbs)
+  ['stairs','tower','ruins','spiral','bridges','ascent','ruins','tower','spiral','ruins'],
+  // 2 Scorching Desert (epic scale: long runs, great pyramids & mesas, wide stone crossings)
+  ['causeway','pyramid','gauntlet','stepstones','ruins','mesa','gauntlet','pyramid','stepstones','causeway'],
+  // 3 Cloudtop Skies (air & verticality; no water/lava -> void gaps, never river/moat/stepstones)
+  ['islands','ascent','spiral','bridges','archipelago','cascade','tower','spiral','islands','chasm'],
+  // 4 Murky Swamp (sunken crossings: bridges, stepping stones, moated keeps)
+  ['bridges','moat','stepstones','river','bridges','moat','ruins','river','causeway','stepstones'],
+  // 5 Crystal Caverns (descents, towers & corkscrews over lava/water chasms)
+  ['cascade','tower','spiral','chasm','ascent','cascade','moat','ruins','chasm','spiral'],
+  // 6 Ember Volcano (lava everywhere: chasms, gauntlets, stepping stones over magma)
+  ['chasm','stepstones','gauntlet','river','chasm','mesa','stepstones','gauntlet','chasm','river'],
+  // 7 Frostbite Glacier (slippery descents, island hops, icy pyramids & spires)
+  ['cascade','islands','bridges','pyramid','cascade','archipelago','islands','spiral','cascade','pyramid'],
+  // 8 Tideheart Ocean (water crossings everywhere: archipelagos, ferries, cascades)
+  ['river','archipelago','chasm','islands','stepstones','river','archipelago','chasm','cascade','archipelago'],
+  // 9 Twilight Expanse (finale: the hardest mix of every shape in the game)
+  ['gauntlet','spiral','chasm','moat','ruins','mesa','stepstones','chasm','ascent','pyramid'],
 ];
 function buildLevels(){
   const out=[];
@@ -1455,8 +1456,100 @@ function layoutCauseway(S){
   S.x=base+len;
   return offDragon();
 }
+// pyramid — a grand symmetric stepped mountain: climb one face, cross a flat apex
+// (a natural perch for defenders), then descend the mirror face. No hazard.
+function layoutPyramid(S){
+  const{lvlIdx}=S;S.plats.push(new Rect(S.x,GROUND,160,50));S.x+=160;
+  const n=4+(lvlIdx>10?2:0),sw=110,base=S.x;
+  for(let i=0;i<n;i++)S.plats.push(new Rect(base+i*sw,GROUND-(i+1)*STEP_H,sw,(i+1)*STEP_H+50));
+  const apexX=base+n*sw,apexY=GROUND-(n+1)*STEP_H,apexW=sw+80;
+  S.plats.push(new Rect(apexX,apexY,apexW,(n+1)*STEP_H+50));
+  let dx=apexX+apexW;
+  for(let i=0;i<n;i++)S.plats.push(new Rect(dx+i*sw,GROUND-(n-i)*STEP_H,sw,(n-i)*STEP_H+50));
+  S.x=dx+n*sw;S.plats.push(new Rect(S.x,GROUND,200,50));S.x+=200;
+  return offDragon();
+}
+// moat — a fortress: a raised keep crowned with battlement teeth, defended on
+// both sides by a hazard moat that's crossed by a single stepping stone.
+function layoutMoat(S){
+  const{lvlIdx}=S;S.plats.push(new Rect(S.x,GROUND,150,50));S.x+=150;
+  const mw=130+min(lvlIdx*3,60);
+  hazardPit(S,mw,[{dx:mw/2-35,dy:64,w:70}]);
+  const keepH=104,keepW=360+min(lvlIdx*8,160),kx=S.x,ky=GROUND-keepH;
+  S.plats.push(new Rect(kx,ky,keepW,keepH+50));
+  for(let i=0;i<5;i++)S.plats.push(new Rect(kx+30+i*((keepW-72)/4),ky-34,24,34));
+  S.x=kx+keepW;
+  hazardPit(S,mw,[{dx:mw/2-35,dy:64,w:70}]);
+  S.plats.push(new Rect(S.x,GROUND,200,50));S.x+=200;
+  return offDragon();
+}
+// mesa — a high tableland: a ramp climbs to a long elevated road (patrolled by
+// enemies) broken by low hurdle walls, ending in a stepped cliff descent.
+function layoutMesa(S){
+  const{lvlIdx}=S;S.plats.push(new Rect(S.x,GROUND,180,50));S.x+=180;
+  for(let i=0;i<3;i++)S.plats.push(new Rect(S.x+i*120,GROUND-(i+1)*60,120,(i+1)*60+50));
+  S.x+=3*120;
+  const topY=GROUND-3*60,topW=640+min(lvlIdx*18,360);
+  S.plats.push(new Rect(S.x,topY,topW,3*60+50));
+  for(let i=0;i<3;i++)S.plats.push(new Rect(S.x+170+i*((topW-300)/3),topY-46,24,46));
+  S.x+=topW;
+  for(let i=0;i<2;i++)S.plats.push(new Rect(S.x+i*120,GROUND-(2-i)*60,120,(2-i)*60+50));
+  S.x+=2*120;
+  S.plats.push(new Rect(S.x,GROUND,200,50));S.x+=200;
+  return offDragon();
+}
+// spiral — a tight vertical corkscrew: ledges rotate right-center-left-center as
+// they rise around an open shaft up to a summit, then a quick stepped descent.
+function layoutSpiral(S){
+  const{lvlIdx}=S;S.plats.push(new Rect(S.x,GROUND,150,50));S.x+=150;
+  const base=S.x,offs=[0,150,300,150];
+  let y=GROUND-64,lastOff=0;const rungs=6+(lvlIdx>12?1:0);
+  for(let i=0;i<rungs;i++){lastOff=offs[i%offs.length];S.plats.push(new Rect(base+lastOff,y,130,15));y-=64;}
+  const sumX=base+lastOff-25;
+  S.plats.push(new Rect(sumX,y,180,15)); // summit directly above the last rung
+  let dx=sumX+220;
+  for(let i=0;i<4;i++){S.plats.push(new Rect(dx,GROUND-(4-i)*64,120,16));dx+=140;}
+  S.x=dx;S.plats.push(new Rect(S.x,GROUND,200,50));S.x+=200;
+  return offDragon();
+}
+// stepstones — a long open hazard crossed only by small stepping stones at
+// alternating heights: a pure precision-hopping gauntlet with no ground between.
+function layoutStepstones(S){
+  const{lvlIdx,cfg}=S;S.plats.push(new Rect(S.x,GROUND,150,50));S.x+=150;
+  const n=7+(lvlIdx>8?2:0),span=n*150+120,startH=S.x;
+  if(cfg.hasLava)S.lavaArr.push(new Lava(startH,span,GROUND));
+  else if(cfg.hasWater)S.waterZones.push(new Water(startH,span,GROUND));
+  for(let i=0;i<n;i++)S.plats.push(new Rect(startH+60+i*150,GROUND-(i%2?100:55),80,15));
+  S.x=startH+span;S.plats.push(new Rect(S.x,GROUND,200,50));S.x+=200;
+  return offDragon();
+}
+// archipelago — two clusters of tiny isles over open water linked by a dragon
+// ferry that carries you across the wide central channel.
+function layoutArchipelago(S){
+  const{lvlIdx,cfg}=S;S.plats.push(new Rect(S.x,GROUND,160,50));S.x+=160;
+  const span1=520,start1=S.x;
+  if(cfg.hasLava)S.lavaArr.push(new Lava(start1,span1,GROUND));
+  else if(cfg.hasWater)S.waterZones.push(new Water(start1,span1,GROUND));
+  for(let i=0;i<3;i++)S.plats.push(new Rect(start1+40+i*150,GROUND-(i%2?70:40),110,16));
+  S.x=start1+span1;S.plats.push(new Rect(S.x,GROUND,150,50));S.x+=150;
+  const ferryW=460+lvlIdx*14,startF=S.x;
+  if(cfg.hasLava)S.lavaArr.push(new Lava(startF,ferryW,GROUND));
+  else if(cfg.hasWater)S.waterZones.push(new Water(startF,ferryW,GROUND));
+  S.plats.push(new Rect(startF+40,GROUND-55,70,15));
+  S.plats.push(new Rect(startF+ferryW-110,GROUND-55,70,15));
+  const dlb=startF+150,drb=startF+ferryW-150;
+  const dragon=new Dragon(dlb+20,GROUND-30,dlb,drb,1.4+lvlIdx*0.05);
+  S.x=startF+ferryW;S.plats.push(new Rect(S.x,GROUND,150,50));S.x+=150;
+  const span2=520,start2=S.x;
+  if(cfg.hasLava)S.lavaArr.push(new Lava(start2,span2,GROUND));
+  else if(cfg.hasWater)S.waterZones.push(new Water(start2,span2,GROUND));
+  for(let i=0;i<3;i++)S.plats.push(new Rect(start2+40+i*150,GROUND-(i%2?40:70),110,16));
+  S.x=start2+span2;S.plats.push(new Rect(S.x,GROUND,200,50));S.x+=200;
+  return dragon;
+}
 const LAYOUTS={stairs:layoutStairs,pits:layoutPits,islands:layoutIslands,tower:layoutTower,gauntlet:layoutGauntlet,river:layoutRiver,
-  bridges:layoutBridges,ascent:layoutAscent,chasm:layoutChasm,ruins:layoutRuins,cascade:layoutCascade,causeway:layoutCauseway};
+  bridges:layoutBridges,ascent:layoutAscent,chasm:layoutChasm,ruins:layoutRuins,cascade:layoutCascade,causeway:layoutCauseway,
+  pyramid:layoutPyramid,moat:layoutMoat,mesa:layoutMesa,spiral:layoutSpiral,stepstones:layoutStepstones,archipelago:layoutArchipelago};
 
 function generateLevel(lvlIdx){
   const cfg=LEVELS[lvlIdx];
