@@ -233,7 +233,7 @@ let unlockedForms=['sparky','bigrest'];
 const nameInput=document.getElementById('playerNameInput');
 const nameContainer=document.getElementById('nameContainer');
 // ===== CHEAT CODES =====
-// "leben" -> restore all lives (Leben = lives), NOT invincibility. "L" + number -> jump to that level (L9 = level 9).
+// "leben" -> restore all lives (Leben = lives). "power" -> toggle invincibility. "L" + number -> jump to that level (L9 = level 9).
 const LEVEL_JUMP_TIMEOUT_MS=500; // commit a single-digit level jump this long after the digit is typed
 let cheatBuf='', lvlJumpBuf='', lvlJumpTimer=0, cheatMsg='', cheatMsgT=0;
 function flashCheat(msg){cheatMsg=msg;cheatMsgT=150;}
@@ -252,10 +252,12 @@ function handleCheatKey(e){
   if(e.code==='KeyL'){lvlJumpBuf='';lvlJumpTimer=performance.now();}
   else if(lvlJumpTimer&&/^[0-9]$/.test(e.key)){lvlJumpBuf+=e.key;lvlJumpTimer=performance.now();
     if(lvlJumpBuf.length>=2)commitLevelJump();return;}
-  // Lives cheat: type "leben" to refill all lives (does not make you invincible).
+  // Cheats: "leben" refills all lives; "power" toggles invincibility. Both keep the level finishable.
   if(/^[a-zA-Z]$/.test(e.key)){cheatBuf=(cheatBuf+e.key.toLowerCase()).slice(-5);
     if(cheatBuf==='leben'&&player){player.lives=player.maxLives;cheatBuf='';
-      flashCheat('CHEAT: Lives restored');}}
+      flashCheat('CHEAT: Lives restored');}
+    else if(cheatBuf==='power'&&player){player.godmode=!player.godmode;cheatBuf='';
+      flashCheat(player.godmode?'CHEAT: Invincible ON':'CHEAT: Invincible OFF');}}
 }
 cv.addEventListener('keydown',e=>{keys[e.code]=true; if(e.code==='KeyF')atkQueued=true; if(e.code==='KeyG')guitarAtkQueued=true; anyKey=true; handleCheatKey(e); e.preventDefault();});
 cv.addEventListener('keyup',e=>{keys[e.code]=false; e.preventDefault();});
