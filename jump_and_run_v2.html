@@ -1667,6 +1667,14 @@ let player,plats,enemies,coins,flag,clouds,waterZones,dragon,powerItem;
 let camX=0,targetCamX=0,titleAnim=0;
 let completeTimer=0,evolutionFrom=null,evolutionTo=null;
 
+// ===== WORLD-MAP OVERVIEW =====
+// After clearing a level the game shows an overworld map: the character walks
+// along a winding path from the node it just cleared to the next level's node,
+// crossing a themed banner whenever it enters a new stage. Then play resumes.
+let MAP_NODES=null,MAP_TOTAL_W=0;
+let mapCamX=0,mapWalk=null,mapAnim=0,mapDoneT=0;
+const MAP_BASE_Y=H*0.60,MAP_AMP=54,MAP_NODE_GAP=126,MAP_STAGE_GAP=148,MAP_START_X=150;
+
 // ===== STAGE PROGRESS (persisted per-browser via localStorage) =====
 // maxStageUnlocked is the 0-based index of the furthest stage the player may
 // start from in the stage-select screen. Stage 0 is always available.
@@ -1859,6 +1867,166 @@ function drawLevelComplete(tick){
   if(completeTimer>30)dText('Press any key to continue...',14,W/2,H-60,'rgba(255,255,255,0.5)',true,false,true);
 }
 
+// ===== WORLD-MAP OVERVIEW =====
+// Per-stage colour palettes for the map background, hills and path nodes.
+const MAP_TINTS={
+  meadow:  {g:'#5cb85c',d:'#2e7d32',s0:'#cdeeff',s1:'#8fcdf0'},
+  forest:  {g:'#3f8f4a',d:'#1f4d28',s0:'#bfe0d4',s1:'#6fa890'},
+  desert:  {g:'#e3bd66',d:'#b8862f',s0:'#ffe9b8',s1:'#f4c878'},
+  sky:     {g:'#bcd9ff',d:'#88b4e8',s0:'#e2f0ff',s1:'#a8ccf2'},
+  swamp:   {g:'#6e7d44',d:'#3a4720',s0:'#bcc69a',s1:'#7e8c5a'},
+  cave:    {g:'#8866b8',d:'#3a2a58',s0:'#c2aada',s1:'#6a5690'},
+  volcano: {g:'#d8642e',d:'#7a1c10',s0:'#ffc89a',s1:'#e07848'},
+  ice:     {g:'#a6e0ee',d:'#5b9fc0',s0:'#e6f7ff',s1:'#b6e2f2'},
+  ocean:   {g:'#3f9fd0',d:'#1d5e98',s0:'#cdeeff',s1:'#7fc0e8'},
+  twilight:{g:'#6a5aa8',d:'#2a2050',s0:'#bcb0e8',s1:'#7a6cb0'},
+};
+function mapTint(theme){return MAP_TINTS[theme]||MAP_TINTS.meadow;}
+
+// Build (once) the world-coordinate node positions for every level along a
+// winding path, grouped into stages with an extra gap between stages.
+function buildMapNodes(){
+  if(MAP_NODES)return MAP_NODES;
+  const nodes=[];let x=MAP_START_X;
+  for(let s=0;s<STAGES.length;s++){
+    if(s>0)x+=MAP_STAGE_GAP;
+    for(let l=0;l<LEVELS_PER_STAGE;l++){
+      const gi=s*LEVELS_PER_STAGE+l;
+      const y=MAP_BASE_Y+sin(gi*0.5)*MAP_AMP+cos(gi*0.27)*16;
+      nodes.push({x,y,stage:s,level:gi,stageStart:l===0});
+      x+=MAP_NODE_GAP;
+    }
+  }
+  MAP_NODES=nodes;MAP_TOTAL_W=x+MAP_START_X;
+  return nodes;
+}
+
+// Enter the overworld after a level was cleared: set up the walk from the
+// cleared node to the next level's node (or stay put on the final level).
+function enterWorldMap(){
+  buildMapNodes();
+  const last=MAP_NODES.length-1;
+  const fromIdx=clamp(currentLevel-1,0,last);          // node just cleared (currentLevel is 1-based)
+  const isFinal=currentLevel>=LEVELS.length;
+  const toIdx=isFinal?fromIdx:clamp(currentLevel,0,last);
+  mapWalk={from:fromIdx,to:toIdx,t:isFinal?1:0,phase:0,done:isFinal,
+           ax:MAP_NODES[fromIdx].x,ay:MAP_NODES[fromIdx].y,faceDir:1};
+  mapCamX=clamp(MAP_NODES[fromIdx].x-W*0.42,0,max(0,MAP_TOTAL_W-W));
+  mapAnim=0;mapDoneT=0;
+  state='worldmap';
+}
+
+function updateWorldMap(){
+  mapAnim++;
+  const nodes=MAP_NODES,mw=mapWalk,a=nodes[mw.from],b=nodes[mw.to];
+  mw.faceDir=b.x>=a.x?1:-1;
+  if(!mw.done){
+    const dist=sqrt((b.x-a.x)*(b.x-a.x)+(b.y-a.y)*(b.y-a.y))||1;
+    mw.t=min(1,mw.t+3.0/dist);
+    mw.phase+=0.4;
+    if(mw.t>=1){mw.done=true;mapDoneT=0;if(typeof sfxItem==='function')sfxItem();}
+  }else mapDoneT++;
+  mw.ax=lerp(a.x,b.x,mw.t);
+  mw.ay=lerp(a.y,b.y,mw.t)-(mw.done?0:abs(sin(mw.phase))*5);
+  const tcam=clamp(mw.ax-W*0.42,0,max(0,MAP_TOTAL_W-W));
+  mapCamX+=(tcam-mapCamX)*0.12;
+  if(mw.done&&mapDoneT>24&&(anyKey||mapDoneT>150)){anyKey=false;advanceLevel();}
+}
+
+function drawMapAvatar(sx,sy,walking,phase,faceDir){
+  const col=(FORM_DATA[player&&player.form]&&FORM_DATA[player.form].color)||'#ffdc28';
+  const cy=sy;
+  // shadow
+  ctx.save();ctx.globalAlpha=0.22;ctx.fillStyle='#000';
+  ctx.beginPath();ctx.ellipse(sx,sy+18,16,5,0,0,TAU);ctx.fill();ctx.restore();
+  // legs (alternating swing while walking)
+  const sw=walking?sin(phase)*5:0;
+  ctx.strokeStyle='#3a2a18';ctx.lineWidth=4;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(sx-5,cy+8);ctx.lineTo(sx-5+sw,cy+18);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(sx+5,cy+8);ctx.lineTo(sx+5-sw,cy+18);ctx.stroke();
+  // body
+  fCir(sx,cy,14,col);
+  sCir(sx,cy,14,'rgba(0,0,0,0.25)',2);
+  ctx.save();ctx.globalAlpha=0.35;fCir(sx,cy+4,8,'#fff');ctx.restore();
+  // eyes (look toward walk direction)
+  const ex=faceDir>=0?2:-2;
+  fCir(sx-4+ex,cy-3,3,'#fff');fCir(sx+5+ex,cy-3,3,'#fff');
+  fCir(sx-4+ex+faceDir,cy-3,1.5,'#222');fCir(sx+5+ex+faceDir,cy-3,1.5,'#222');
+  // cheeks
+  ctx.save();ctx.globalAlpha=0.5;fCir(sx-7,cy+2,2.5,'#ff9aa0');fCir(sx+8,cy+2,2.5,'#ff9aa0');ctx.restore();
+}
+
+function drawWorldMap(){
+  const nodes=MAP_NODES,mw=mapWalk;
+  const toNode=nodes[mw.to];
+  const tint=mapTint(STAGES[toNode.stage].theme);
+  // sky
+  fRect(0,0,W,H,linGrad(0,0,0,H,[[0,tint.s0],[1,tint.s1]]));
+  ctx.save();ctx.globalAlpha=0.5;fCir(W-110,92,46,'#ffffff');ctx.restore();
+  // parallax clouds
+  for(let i=0;i<6;i++){
+    const cxp=((i*230-mapCamX*0.22)%(W+280)+W+280)%(W+280)-130,cyp=58+(i%3)*32;
+    ctx.save();ctx.globalAlpha=0.5;fCir(cxp,cyp,17,'#fff');fCir(cxp+20,cyp+4,21,'#fff');fCir(cxp+42,cyp,15,'#fff');ctx.restore();
+  }
+  // rolling parallax hills
+  for(let layer=0;layer<2;layer++){
+    const off=mapCamX*(0.4+layer*0.28),yb=H*(0.64+layer*0.11),col=layer===0?tint.g:tint.d;
+    ctx.fillStyle=col;ctx.globalAlpha=layer===0?0.55:0.8;ctx.beginPath();ctx.moveTo(0,H);
+    for(let xx=0;xx<=W;xx+=18){const hy=yb+sin((xx+off)*0.006+layer*1.7)*22;ctx.lineTo(xx,hy);}
+    ctx.lineTo(W,H);ctx.closePath();ctx.fill();ctx.globalAlpha=1;
+  }
+  // --- path segments ---
+  ctx.lineCap='round';ctx.lineJoin='round';
+  for(let i=0;i<nodes.length-1;i++){
+    const a=nodes[i],b=nodes[i+1],ax=a.x-mapCamX,bx=b.x-mapCamX;
+    if(max(ax,bx)<-40||min(ax,bx)>W+40)continue;
+    const traveled=(i+1)<=mw.to;
+    ctx.strokeStyle=traveled?'rgba(255,208,84,0.92)':'rgba(255,255,255,0.30)';
+    ctx.lineWidth=traveled?9:7;
+    ctx.beginPath();ctx.moveTo(ax,a.y);ctx.lineTo(bx,b.y);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.5)';ctx.lineWidth=2;ctx.setLineDash([3,9]);
+    ctx.beginPath();ctx.moveTo(ax,a.y);ctx.lineTo(bx,b.y);ctx.stroke();ctx.setLineDash([]);
+  }
+  // --- stage banners ---
+  for(const n of nodes){
+    if(!n.stageStart)continue;const sx=n.x-mapCamX;if(sx<-90||sx>W+90)continue;
+    const st=STAGES[n.stage],tt=mapTint(st.theme),py=n.y-94;
+    dLine(sx-24,n.y-6,sx-24,py+10,'#5a3a1a',4);
+    fRRect(sx-24,py-26,168,36,7,tt.d);
+    fRRect(sx-24,py-26,168,36,7,'rgba(255,255,255,0.06)');
+    dText('Stage '+(n.stage+1),12,sx-16,py-21,'#ffe9a8',false,true,true);
+    dText(st.name,11,sx-16,py-7,'#ffffff',false,false,false);
+  }
+  // --- nodes ---
+  for(const n of nodes){
+    const sx=n.x-mapCamX;if(sx<-30||sx>W+30)continue;
+    const cleared=n.level<mw.to,target=n.level===mw.to,future=n.level>mw.to;
+    const bossNode=(n.level%LEVELS_PER_STAGE)===(LEVELS_PER_STAGE-1);
+    const tt=mapTint(STAGES[n.stage].theme),r=bossNode?15:11;
+    if(future){fCir(sx,n.y,r,'rgba(255,255,255,0.18)');sCir(sx,n.y,r,'rgba(255,255,255,0.35)',2);}
+    else{fCir(sx,n.y,r+2,'rgba(0,0,0,0.18)');fCir(sx,n.y,r,tt.g);sCir(sx,n.y,r,'#fff',2);}
+    if(cleared){ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(sx-4,n.y);ctx.lineTo(sx-1,n.y+4);ctx.lineTo(sx+5,n.y-4);ctx.stroke();}
+    if(target){const pr=r+6+sin(mapAnim*0.12)*3;sCir(sx,n.y,pr,'#ffd700',3);
+      if(mw.done&&mapDoneT<28){const a2=1-mapDoneT/28;ctx.save();ctx.globalAlpha=a2;sCir(sx,n.y,r+10+(28-mapDoneT),'#fff',2);ctx.restore();}}
+    if(bossNode){dLine(sx+r-1,n.y,sx+r-1,n.y-15,'#fff',2);
+      fPoly([[sx+r-1,n.y-15],[sx+r+10,n.y-11],[sx+r-1,n.y-7]],future?'rgba(255,255,255,0.5)':'#ff5252');}
+    dText('L'+(n.level+1),10,sx,n.y+r+10,future?'rgba(255,255,255,0.55)':'#fff',true,false,bossNode);
+  }
+  // --- avatar ---
+  drawMapAvatar(mw.ax-mapCamX,mw.ay,!mw.done,mw.phase,mw.faceDir);
+  // --- header / hint ---
+  fRect(0,0,W,46,'rgba(0,0,0,0.32)');
+  dText('WORLD MAP',20,20,13,'#ffd700',false,true,true);
+  dText('Stage '+(toNode.stage+1)+' · '+STAGES[toNode.stage].name,13,168,17,'#fff',false,false,false);
+  dText('Cleared '+currentLevel+' / '+LEVELS.length,12,W-80,17,'rgba(255,255,255,0.75)',true,false,false);
+  if(mw.done){
+    ctx.save();ctx.globalAlpha=0.55+sin(mapAnim*0.12)*0.3;
+    const msg=mw.from===mw.to?'Journey complete - press any key':'Arrived! Press any key for Level '+(mw.to+1);
+    dText(msg,15,W/2,H-32,'#fff',true,true,true);ctx.restore();
+  }else dText('Walking to the next level...',13,W/2,H-32,'rgba(255,255,255,0.7)',true,false,true);
+}
+
 // ===== GAME OVER =====
 function drawGameOver(tick){
   fRect(0,0,W,H,won?linGrad(0,0,0,H,[[0,'#1a4020'],[1,'#0a2010']]):linGrad(0,0,0,H,[[0,'#2a1020'],[1,'#100810']]));
@@ -2001,7 +2169,9 @@ function loop(){
     else{drawGameOver(tick);winSfxPlayed=won;}
   }else if(state==='levelcomplete'){
     completeTimer++;drawLevelComplete(completeTimer);
-    if((anyKey&&completeTimer>30)||completeTimer>240){anyKey=false;advanceLevel();}
+    if((anyKey&&completeTimer>30)||completeTimer>240){anyKey=false;enterWorldMap();}
+  }else if(state==='worldmap'){
+    updateWorldMap();if(state==='worldmap')drawWorldMap();
   }else if(state==='gameover'){
     drawGameOver(tick);tick++;
     if(keys.KeyR){playerName='';state='title';anyKey=false;winSfxPlayed=false;}
