@@ -1677,6 +1677,9 @@ let mapWalk=null,mapAnim=0,mapDoneT=0;
 let mapCamX=0,mapCamY=0,mapScale=1,mapTgtX=0,mapTgtY=0,mapTgtScale=1;
 const MAP_PAD=150,MAP_ROW_H=128,MAP_NODE_GAP=120,MAP_WAVE=18;
 const MAP_FOCUS_S=1.18,MAP_INTRO_HOLD=80,MAP_WALK_SPEED=3.2;
+let MAP_ART=null;                                   // cached hand-drawn parchment continent
+const MAP_INK='#5a4326',MAP_INK2='rgba(90,67,38,0.55)';
+const MAP_REGIONS=['Greenmeadow','Whispering Woods','Sundune Wastes','Cloudspire Highlands','Mirefen Marsh','Hollow Deep','Emberfall','Frostcrown','Sundering Sea','Duskhaven Isles'];
 
 // ===== STAGE PROGRESS (persisted per-browser via localStorage) =====
 // maxStageUnlocked is the 0-based index of the furthest stage the player may
@@ -1917,7 +1920,7 @@ function clampCamY(y,s){const hv=(H/2)/s;return MAP_H<=hv*2?MAP_H/2:clamp(y,hv-3
 // Enter the overworld after a level was cleared. seq: intro (whole map) ->
 // zoom (into current stage) -> walk (avatar to next node) -> done.
 function enterWorldMap(){
-  buildMapNodes();
+  buildMapNodes();buildMapArt();
   const last=MAP_NODES.length-1;
   const fromIdx=clamp(currentLevel-1,0,last);
   const isFinal=currentLevel>=LEVELS.length;
@@ -1966,23 +1969,258 @@ function updateWorldMap(){
 function applyMapCam(){ctx.save();ctx.translate(W/2,H/2);ctx.scale(mapScale,mapScale);ctx.translate(-mapCamX,-mapCamY);}
 function mapRnd(n){const v=sin(n*127.1+13.0)*43758.5453;return v-floor(v);}
 
-// Draw one stage as a rounded biome island band with beach rim and decorations.
-function drawStageIsland(s){
-  const tt=mapTint(STAGES[s].theme),rowY=MAP_PAD+s*MAP_ROW_H;
-  const x0=MAP_PAD-60,x1=MAP_PAD+(LEVELS_PER_STAGE-1)*MAP_NODE_GAP+60;
-  const w=x1-x0,top=rowY-50,h=100;
-  ctx.save();ctx.globalAlpha=0.20;fRRect(x0+7,top+12,w,h,42,'#06203a');ctx.restore();
-  fRRect(x0,top,w,h,42,tt.r);                 // beach rim
-  fRRect(x0+9,top+9,w-18,h-18,34,tt.g);       // land
-  ctx.save();ctx.globalAlpha=0.22;fRRect(x0+9,top+9,w-18,(h-18)*0.42,34,'#ffffff');ctx.restore();
-  for(let i=0;i<16;i++){
-    const rx=x0+34+mapRnd(s*53+i*7)*(w-68);
-    const ry=rowY+(mapRnd(s*29+i*3)>0.5?-1:1)*(30+mapRnd(s*11+i)*12);
-    if(i%3===0){const mh=12+mapRnd(s*7+i)*11;
-      fPoly([[rx-mh*0.7,ry+4],[rx,ry-mh],[rx+mh*0.7,ry+4]],tt.deco);
-      fPoly([[rx-2,ry-mh+3],[rx,ry-mh],[rx+3,ry-mh+4],[rx,ry-mh+7]],'rgba(255,255,255,0.65)');
-    }else{fCir(rx,ry+1,4.2,tt.deco);fCir(rx+3,ry-2,3.2,tt.deco);}
+/* ============================================================
+   PARCHMENT INK CARTOGRAPHY — the whole continent is rendered
+   ONCE to an offscreen canvas (MAP_ART) and then blitted under
+   the camera each frame. Only the route progress, the map
+   markers and the avatar are redrawn live.
+   ============================================================ */
+function hexA(hex,a){const n=parseInt(hex.slice(1),16);return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';}
+function traceClosed(g,pts){g.beginPath();for(let i=0;i<pts.length;i++){const p=pts[i];i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]);}g.closePath();}
+function scalePts(pts,f){const cx=MAP_W/2,cy=MAP_H/2;return pts.map(p=>[cx+(p[0]-cx)*f,cy+(p[1]-cy)*f]);}
+function roundRectPath(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+
+// Irregular rounded-rectangle coastline filling the parchment.
+function buildCoast(w,h){
+  const inset=88,cx=w/2,cy=h/2,rx=w/2-inset,ry=h/2-inset,N=80,pts=[];
+  for(let i=0;i<N;i++){
+    const a=i/N*TAU,ca=cos(a),sa=sin(a);
+    const wob=1+sin(a*5+1)*0.035+sin(a*9+2)*0.025+(mapRnd(i*13)-0.5)*0.05;
+    pts.push([cx+Math.sign(ca)*Math.pow(abs(ca),0.62)*rx*wob,
+              cy+Math.sign(sa)*Math.pow(abs(sa),0.62)*ry*wob]);
   }
+  return pts;
+}
+
+function paintParchment(g,w,h){
+  const grd=g.createLinearGradient(0,0,w,h);
+  grd.addColorStop(0,'#f1e5c6');grd.addColorStop(0.5,'#e8d8b0');grd.addColorStop(1,'#ddc89e');
+  g.fillStyle=grd;g.fillRect(0,0,w,h);
+  for(let i=0;i<150;i++){const x=mapRnd(i*3+1)*w,y=mapRnd(i*7+2)*h,r=20+mapRnd(i*5)*72;
+    g.save();g.globalAlpha=0.035+mapRnd(i)*0.05;g.fillStyle=mapRnd(i*9)>0.5?'#b89b62':'#fff4d8';
+    g.beginPath();g.arc(x,y,r,0,TAU);g.fill();g.restore();}
+  for(let i=0;i<800;i++){const x=mapRnd(i*1.7+5)*w,y=mapRnd(i*2.3+9)*h;
+    g.save();g.globalAlpha=0.05;g.fillStyle=mapRnd(i)>0.5?'#7a5e30':'#fffaf0';g.fillRect(x,y,1.4,1.4);g.restore();}
+}
+
+// Sea = parchment with faint wavy contour hatching (land is painted over it).
+function paintSea(g,w,h){
+  g.save();g.strokeStyle='rgba(70,95,120,0.20)';g.lineWidth=1.3;
+  for(let y=18;y<h;y+=26){g.beginPath();
+    for(let x=0;x<=w;x+=12){const yy=y+sin(x*0.05+y*0.1)*3;x?g.lineTo(x,yy):g.moveTo(x,yy);}
+    g.stroke();}
+  g.restore();
+}
+
+function paintLand(g,coast){
+  g.save();
+  traceClosed(g,coast.map(p=>[p[0]+5,p[1]+7]));g.fillStyle='rgba(70,48,20,0.18)';g.fill();
+  traceClosed(g,coast);
+  const grd=g.createLinearGradient(0,0,0,MAP_H);grd.addColorStop(0,'#ecdfba');grd.addColorStop(1,'#e1cfa1');
+  g.fillStyle=grd;g.fill();
+  g.lineJoin='round';g.strokeStyle=MAP_INK;g.lineWidth=2.4;g.stroke();
+  for(let k=1;k<=2;k++){traceClosed(g,scalePts(coast,1-0.012*k));
+    g.strokeStyle='rgba(90,67,38,'+(0.30-k*0.09)+')';g.lineWidth=1.1;g.stroke();}
+  g.restore();
+}
+
+function paintRivers(g,w,h){
+  g.save();g.strokeStyle='rgba(70,100,130,0.5)';g.lineWidth=2.4;g.lineCap='round';g.lineJoin='round';
+  g.beginPath();g.moveTo(w*0.3,h*0.16);g.bezierCurveTo(w*0.37,h*0.40,w*0.20,h*0.56,w*0.34,h*0.82);g.stroke();
+  g.beginPath();g.moveTo(w*0.72,h*0.18);g.bezierCurveTo(w*0.60,h*0.44,w*0.79,h*0.60,w*0.66,h*0.86);g.stroke();
+  g.restore();
+}
+
+// ---- ink glyph kit (all procedural) ----
+function inkMountain(g,x,y,s,col,snow,cave){
+  const w=24*s,h=22*s;g.save();g.lineJoin='round';
+  g.beginPath();g.moveTo(x-w/2,y);g.lineTo(x,y-h);g.lineTo(x+w/2,y);g.closePath();
+  g.fillStyle=hexA(col,0.30);g.fill();g.strokeStyle=MAP_INK;g.lineWidth=1.6;g.stroke();
+  g.strokeStyle=MAP_INK2;g.lineWidth=1;
+  g.beginPath();g.moveTo(x,y-h);g.lineTo(x+3*s,y);g.stroke();
+  for(let i=1;i<=3;i++){g.beginPath();g.moveTo(x+1.5*s,y-h+i*h*0.22);g.lineTo(x+w*0.32,y-i*h*0.05);g.stroke();}
+  if(snow){g.fillStyle='#fbfcff';g.beginPath();g.moveTo(x,y-h);g.lineTo(x-6*s,y-h+8*s);g.lineTo(x-2*s,y-h+6*s);g.lineTo(x,y-h+9*s);g.lineTo(x+2*s,y-h+6*s);g.lineTo(x+6*s,y-h+8*s);g.closePath();g.fill();}
+  if(cave){g.fillStyle='#2e2212';g.beginPath();g.moveTo(x-4*s,y);g.lineTo(x-4*s,y-4*s);g.quadraticCurveTo(x,y-9*s,x+4*s,y-4*s);g.lineTo(x+4*s,y);g.closePath();g.fill();}
+  g.restore();
+}
+function inkVolcano(g,x,y,s,col){
+  const w=28*s,h=22*s;g.save();g.lineJoin='round';
+  g.beginPath();g.moveTo(x-w/2,y);g.lineTo(x-6*s,y-h);g.lineTo(x+6*s,y-h);g.lineTo(x+w/2,y);g.closePath();
+  g.fillStyle=hexA(col,0.32);g.fill();g.strokeStyle=MAP_INK;g.lineWidth=1.6;g.stroke();
+  g.fillStyle='#c0392b';g.beginPath();g.ellipse(x,y-h,6*s,2.4*s,0,0,TAU);g.fill();
+  g.strokeStyle='#c0392b';g.lineWidth=1.4;g.lineCap='round';g.beginPath();g.moveTo(x-2*s,y-h+1);g.lineTo(x-5*s,y-h*0.45);g.stroke();
+  g.strokeStyle=MAP_INK2;g.lineWidth=1.2;
+  for(let i=0;i<3;i++){g.beginPath();g.arc(x+(i-1)*4*s,y-h-7*s-i*5*s,4*s,PI*0.1,PI*0.95);g.stroke();}
+  g.restore();
+}
+function inkTree(g,x,y,s,col,bush){
+  g.save();g.strokeStyle=MAP_INK;g.lineWidth=1.3;g.lineJoin='round';g.fillStyle=hexA(col,0.42);
+  if(bush){g.beginPath();g.arc(x-3*s,y-3*s,4*s,0,TAU);g.arc(x+3*s,y-3*s,4.5*s,0,TAU);g.arc(x,y-6*s,4*s,0,TAU);g.fill();g.stroke();}
+  else{const h=18*s;g.beginPath();g.moveTo(x,y);g.lineTo(x,y-h*0.35);g.stroke();
+    for(let k=0;k<3;k++){const ty=y-h*0.28-k*h*0.26,tw=(7-k*1.8)*s,th=h*0.34;
+      g.beginPath();g.moveTo(x-tw,ty);g.lineTo(x,ty-th);g.lineTo(x+tw,ty);g.closePath();g.fill();g.stroke();}}
+  g.restore();
+}
+function inkDune(g,x,y,s,col){
+  g.save();g.lineCap='round';g.strokeStyle=hexA(col,0.85);g.lineWidth=1.6;
+  g.beginPath();g.moveTo(x-14*s,y);g.quadraticCurveTo(x-2*s,y-8*s,x+14*s,y);g.stroke();
+  g.strokeStyle=hexA(col,0.5);g.beginPath();g.moveTo(x-6*s,y-3*s);g.quadraticCurveTo(x+6*s,y-11*s,x+14*s,y-2*s);g.stroke();
+  g.restore();
+}
+function inkCactus(g,x,y,s,col){
+  g.save();g.strokeStyle=hexA(col,0.95);g.lineWidth=2*s;g.lineCap='round';g.lineJoin='round';
+  g.beginPath();g.moveTo(x,y);g.lineTo(x,y-16*s);g.stroke();
+  g.beginPath();g.moveTo(x,y-6*s);g.lineTo(x-6*s,y-6*s);g.lineTo(x-6*s,y-12*s);g.stroke();
+  g.beginPath();g.moveTo(x,y-10*s);g.lineTo(x+5*s,y-10*s);g.lineTo(x+5*s,y-15*s);g.stroke();
+  g.restore();
+}
+function inkReed(g,x,y,s,col){
+  g.save();g.strokeStyle=hexA(col,0.9);g.lineWidth=1.5;g.lineCap='round';
+  for(let i=-2;i<=2;i++){g.beginPath();g.moveTo(x+i*3*s,y);g.lineTo(x+i*3*s+i*1.4,y-13*s);g.stroke();}
+  g.strokeStyle='rgba(70,95,120,0.55)';g.lineWidth=1.2;g.beginPath();g.moveTo(x-9*s,y+3);g.lineTo(x+9*s,y+3);g.stroke();
+  g.restore();
+}
+function inkWave(g,x,y,s){
+  g.save();g.strokeStyle='rgba(58,88,118,0.6)';g.lineWidth=1.5;g.lineCap='round';
+  g.beginPath();g.moveTo(x-10*s,y);g.quadraticCurveTo(x-5*s,y-5*s,x,y);g.quadraticCurveTo(x+5*s,y+5*s,x+10*s,y);g.stroke();
+  g.restore();
+}
+function inkSpire(g,x,y,s,col){
+  g.save();g.strokeStyle=MAP_INK;g.lineWidth=1.5;g.lineJoin='round';g.fillStyle=hexA(col,0.5);
+  g.beginPath();g.moveTo(x-4*s,y);g.lineTo(x-3*s,y-15*s);g.lineTo(x,y-18*s);g.lineTo(x+3*s,y-15*s);g.lineTo(x+4*s,y);g.closePath();g.fill();g.stroke();
+  g.fillStyle='rgba(255,240,200,0.85)';g.beginPath();g.arc(x+8*s,y-16*s,1.6,0,TAU);g.fill();
+  g.restore();
+}
+function inkCompass(g,cx,cy,r){
+  g.save();g.translate(cx,cy);
+  g.fillStyle='rgba(236,224,192,0.85)';g.strokeStyle=MAP_INK;g.lineWidth=1.6;
+  g.beginPath();g.arc(0,0,r,0,TAU);g.fill();g.stroke();
+  g.beginPath();g.arc(0,0,r*0.66,0,TAU);g.strokeStyle=MAP_INK2;g.lineWidth=1;g.stroke();
+  for(let i=0;i<4;i++){g.save();g.rotate(i*PI/2+PI/4);g.fillStyle=hexA('#6b4f2a',0.55);
+    g.beginPath();g.moveTo(0,-r*0.78);g.lineTo(r*0.12,-r*0.12);g.lineTo(0,0);g.lineTo(-r*0.12,-r*0.12);g.closePath();g.fill();g.restore();}
+  for(let i=0;i<4;i++){g.save();g.rotate(i*PI/2);
+    g.fillStyle=MAP_INK;g.beginPath();g.moveTo(0,-r);g.lineTo(r*0.15,-r*0.14);g.lineTo(0,0);g.closePath();g.fill();
+    g.fillStyle='rgba(90,67,38,0.45)';g.beginPath();g.moveTo(0,-r);g.lineTo(-r*0.15,-r*0.14);g.lineTo(0,0);g.closePath();g.fill();g.restore();}
+  g.fillStyle=MAP_INK;g.font='bold 12px Georgia, serif';g.textAlign='center';g.textBaseline='middle';
+  g.fillText('N',0,-r-9);
+  g.restore();
+}
+function inkSerpent(g,x,y,s){
+  g.save();g.strokeStyle=MAP_INK;g.lineWidth=2.2;g.lineCap='round';g.lineJoin='round';
+  g.beginPath();g.moveTo(x,y);
+  g.quadraticCurveTo(x+10*s,y-12*s,x+20*s,y);
+  g.quadraticCurveTo(x+30*s,y+12*s,x+40*s,y);
+  g.quadraticCurveTo(x+50*s,y-12*s,x+60*s,y-2*s);g.stroke();
+  g.fillStyle='rgba(236,224,192,0.92)';g.beginPath();g.arc(x+64*s,y-3*s,5*s,0,TAU);g.fill();g.stroke();
+  g.fillStyle=MAP_INK;g.beginPath();g.arc(x+66*s,y-4*s,1.4,0,TAU);g.fill();
+  g.restore();
+}
+function inkBoat(g,x,y,s){
+  g.save();g.strokeStyle=MAP_INK;g.lineWidth=1.6;g.lineJoin='round';
+  g.fillStyle='rgba(236,224,192,0.95)';
+  g.beginPath();g.moveTo(x-10*s,y);g.lineTo(x+10*s,y);g.lineTo(x+6*s,y+6*s);g.lineTo(x-6*s,y+6*s);g.closePath();g.fill();g.stroke();
+  g.beginPath();g.moveTo(x,y);g.lineTo(x,y-14*s);g.stroke();
+  g.fillStyle='#e8d6a8';g.beginPath();g.moveTo(x,y-13*s);g.lineTo(x+8*s,y-3*s);g.lineTo(x,y-3*s);g.closePath();g.fill();g.stroke();
+  g.restore();
+}
+
+// One region band's scattered biome glyphs (above/below the route corridor).
+function paintRegion(g,s){
+  const theme=STAGES[s].theme,col=mapTint(theme).deco,rowY=MAP_PAD+s*MAP_ROW_H;
+  const x0=MAP_PAD-20,x1=MAP_PAD+(LEVELS_PER_STAGE-1)*MAP_NODE_GAP+20;
+  const count=theme==='ocean'?10:17;
+  for(let i=0;i<count;i++){
+    const rx=x0+mapRnd(s*97+i*7+1)*(x1-x0);
+    const above=mapRnd(s*61+i*3)>0.5;
+    const ry=rowY+(above?-1:1)*(38+mapRnd(s*17+i)*16);
+    const sz=0.85+mapRnd(s*5+i)*0.6,v=mapRnd(s*29+i*5);
+    switch(theme){
+      case 'sky': inkMountain(g,rx,ry,sz*1.25,col,false,false);break;
+      case 'ice': inkMountain(g,rx,ry,sz*1.2,col,true,false);break;
+      case 'cave': inkMountain(g,rx,ry,sz*1.2,col,false,true);break;
+      case 'volcano': v>0.65?inkVolcano(g,rx,ry,sz*1.2,col):inkMountain(g,rx,ry,sz,col,false,false);break;
+      case 'forest': inkTree(g,rx,ry,sz,col,false);break;
+      case 'meadow': inkTree(g,rx,ry,v>0.5?sz*0.8:sz,col,v>0.5);break;
+      case 'desert': v>0.6?inkCactus(g,rx,ry,sz,col):inkDune(g,rx,ry,sz,col);break;
+      case 'swamp': inkReed(g,rx,ry,sz,col);break;
+      case 'ocean': inkWave(g,rx,ry,sz);break;
+      case 'twilight': inkSpire(g,rx,ry,sz,col);break;
+      default: inkTree(g,rx,ry,sz,col,false);
+    }
+  }
+}
+
+// Faint dotted base route through every node (red progress drawn live on top).
+function paintBaseRoute(g){
+  const nodes=MAP_NODES;g.save();
+  g.strokeStyle='rgba(120,60,40,0.45)';g.lineWidth=2.2;g.lineCap='round';g.setLineDash([2,7]);
+  g.beginPath();for(let i=0;i<nodes.length;i++){const n=nodes[i];i?g.lineTo(n.x,n.y):g.moveTo(n.x,n.y);}g.stroke();
+  g.setLineDash([]);g.restore();
+}
+
+function paintRegionLabel(g,s){
+  const rowY=MAP_PAD+s*MAP_ROW_H,cx=MAP_PAD+(LEVELS_PER_STAGE-1)*MAP_NODE_GAP/2;
+  const name=(MAP_REGIONS[s]||STAGES[s].name).toUpperCase();
+  g.save();g.translate(cx,rowY-44);
+  g.font='italic 600 21px Georgia, "Times New Roman", serif';
+  g.textAlign='center';g.textBaseline='middle';
+  if('letterSpacing' in g)g.letterSpacing='3px';
+  const tw=g.measureText(name).width;
+  g.globalAlpha=0.55;g.fillStyle='#ece0c0';g.fillRect(-tw/2-16,-13,tw+32,26);g.globalAlpha=1;
+  g.fillStyle='rgba(70,50,26,0.92)';g.fillText(name,0,0);
+  g.strokeStyle='rgba(90,67,38,0.55)';g.lineWidth=1.1;
+  g.beginPath();g.moveTo(-tw/2-12,12);g.lineTo(tw/2+12,12);g.stroke();
+  g.beginPath();g.arc(-tw/2-16,12,2,0,TAU);g.fill();g.beginPath();g.arc(tw/2+16,12,2,0,TAU);g.fill();
+  if('letterSpacing' in g)g.letterSpacing='0px';
+  g.restore();
+}
+
+function paintDecorations(g,w,h){
+  // title cartouche (top sea margin)
+  const tx=w/2,ty=52,tw=320,th=44;
+  g.save();
+  g.fillStyle='rgba(236,224,192,0.92)';g.strokeStyle=MAP_INK;g.lineWidth=2;
+  roundRectPath(g,tx-tw/2,ty-th/2,tw,th,8);g.fill();g.stroke();
+  g.strokeStyle=MAP_INK2;g.lineWidth=1;roundRectPath(g,tx-tw/2+5,ty-th/2+5,tw-10,th-10,6);g.stroke();
+  g.fillStyle='#4a3416';g.font='italic 700 22px Georgia, serif';g.textAlign='center';g.textBaseline='middle';
+  if('letterSpacing' in g)g.letterSpacing='4px';
+  g.fillText('THE REALM OF EVOLON',tx,ty+1);
+  if('letterSpacing' in g)g.letterSpacing='0px';
+  g.restore();
+  inkCompass(g,w-74,h-82,34);
+  inkSerpent(g,30,h*0.40,1.1);
+  inkBoat(g,w-72,MAP_PAD+8*MAP_ROW_H,1.2);
+  g.save();g.translate(120,h-58);g.rotate(-0.08);
+  g.fillStyle='rgba(120,40,30,0.7)';g.font='italic 600 16px Georgia, serif';g.textAlign='left';g.textBaseline='middle';
+  if('letterSpacing' in g)g.letterSpacing='2px';
+  g.fillText('Here be dragons',0,0);
+  if('letterSpacing' in g)g.letterSpacing='0px';
+  g.restore();
+}
+
+function paintEdges(g,w,h){
+  const grd=g.createRadialGradient(w/2,h/2,Math.min(w,h)*0.34,w/2,h/2,Math.max(w,h)*0.62);
+  grd.addColorStop(0,'rgba(0,0,0,0)');grd.addColorStop(1,'rgba(60,40,16,0.40)');
+  g.fillStyle=grd;g.fillRect(0,0,w,h);
+}
+
+// Compose the whole illustrated continent once and cache it.
+function buildMapArt(){
+  if(MAP_ART)return MAP_ART;
+  buildMapNodes();
+  const w=MAP_W,h=MAP_H,cap=document.createElement('canvas');
+  cap.width=w;cap.height=h;const g=cap.getContext('2d');
+  const coast=buildCoast(w,h);
+  paintParchment(g,w,h);
+  paintSea(g,w,h);
+  paintLand(g,coast);
+  paintRivers(g,w,h);
+  for(let s=0;s<STAGES.length;s++)paintRegion(g,s);
+  paintBaseRoute(g);
+  for(let s=0;s<STAGES.length;s++)paintRegionLabel(g,s);
+  paintDecorations(g,w,h);
+  paintEdges(g,w,h);
+  MAP_ART=cap;return cap;
 }
 
 function drawMapAvatar(sx,sy,walking,phase,faceDir){
@@ -2008,80 +2246,59 @@ function drawMapAvatar(sx,sy,walking,phase,faceDir){
   ctx.save();ctx.globalAlpha=0.5;fCir(sx-7,cy+2,2.5,'#ff9aa0');fCir(sx+8,cy+2,2.5,'#ff9aa0');ctx.restore();
 }
 
+// A live map marker: visited = inked seal w/ tick, target = red wax seal, future = blank seal.
+function drawMapNode(n,mw){
+  const cleared=n.level<mw.to,target=n.level===mw.to;
+  const boss=(n.level%LEVELS_PER_STAGE)===(LEVELS_PER_STAGE-1),r=boss?11:8;
+  fCir(n.x,n.y+1.5,r+1.5,'rgba(60,40,18,0.30)');
+  fCir(n.x,n.y,r,cleared?'#7a5a2c':(target?'#b02a1e':'#efe2c1'));
+  sCir(n.x,n.y,r,'#4a3416',2);
+  sCir(n.x,n.y,r-3,'rgba(255,255,255,0.32)',1);
+  if(cleared){ctx.strokeStyle='#fff4d8';ctx.lineWidth=2;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(n.x-3.5,n.y);ctx.lineTo(n.x-1,n.y+3.5);ctx.lineTo(n.x+4.5,n.y-3.5);ctx.stroke();}
+  if(boss){const cc=target?'#7a1c10':(cleared?'#6b4f2a':'#9a7f50');
+    fPoly([[n.x-r,n.y-r],[n.x-r,n.y-r-7],[n.x-r+3,n.y-r-3],[n.x,n.y-r-8],[n.x+r-3,n.y-r-3],[n.x+r,n.y-r-7],[n.x+r,n.y-r]],cc);}
+  if(target){const pr=r+5+sin(mapAnim*0.14)*3;sCir(n.x,n.y,pr,'#b02a1e',2);
+    if(mw.done&&mapDoneT<28){const a2=1-mapDoneT/28;ctx.save();ctx.globalAlpha=a2;sCir(n.x,n.y,r+9+(28-mapDoneT),'#fff',2);ctx.restore();}}
+  dText('L'+(n.level+1),9,n.x,n.y+r+9,cleared?'#5a4326':(target?'#b02a1e':'rgba(74,52,22,0.7)'),true,false,boss);
+}
+
+// Screen-space parchment UI ribbon + intro/done captions.
+function drawMapUI(mw,toNode){
+  fRect(0,0,W,42,'rgba(62,42,20,0.82)');
+  dText('\u2726 THE REALM OF EVOLON \u2726',16,W/2,14,'#f0dca0',true,true,true);
+  dText(MAP_REGIONS[toNode.stage]||STAGES[toNode.stage].name,12,16,15,'#e8d6a8',false,false,true);
+  dText('Cleared '+currentLevel+' / '+LEVELS.length,12,W-78,15,'#e8d6a8',true,false,false);
+  if(mw.seq==='intro'){
+    const pw=380,ph=72,px=W/2-pw/2,py=H*0.5-152;
+    ctx.save();ctx.globalAlpha=0.55;fRRect(px,py,pw,ph,10,'rgba(60,42,20,0.7)');ctx.restore();
+    dText('YOUR JOURNEY',26,W/2,H*0.5-132,'#f4e6bf',true,true,true);
+    dText(STAGES.length+' realms \u00b7 '+LEVELS.length+' trials',13,W/2,H*0.5-106,'#e0cda0',true,false,true);
+  }else if(mw.seq==='done'){
+    ctx.save();ctx.globalAlpha=0.65+sin(mapAnim*0.12)*0.3;
+    const msg=mw.from===mw.to?'Journey complete \u2014 press any key':'Press any key for Level '+(mw.to+1);
+    dText(msg,15,W/2,H-28,'#fff4d8',true,true,true);ctx.restore();
+  }else if(mw.seq==='walk'){
+    dText('Travelling onward\u2026',13,W/2,H-28,'rgba(245,235,210,0.85)',true,false,true);
+  }
+}
+
 function drawWorldMap(){
   const nodes=MAP_NODES,mw=mapWalk,toNode=nodes[mw.to];
-  // --- ocean background (screen space, fixed) ---
-  fRect(0,0,W,H,linGrad(0,0,0,H,[[0,'#0e2f59'],[0.5,'#1b5082'],[1,'#2e76ac']]));
-  for(let i=0;i<8;i++){const wy=(i*78+(mapAnim*0.5)%78);ctx.save();ctx.globalAlpha=0.045;fRect(0,wy,W,2,'#ffffff');ctx.restore();}
-  ctx.save();ctx.globalAlpha=0.35;fCir(W-96,80,40,'#fff7e0');ctx.restore();
-
+  fRect(0,0,W,H,'#caa771');                        // table backing behind the map
   applyMapCam();
-  const vl=mapCamX-(W/2)/mapScale-90,vr=mapCamX+(W/2)/mapScale+90;
-  // islands (biome bands)
-  for(let s=0;s<STAGES.length;s++)drawStageIsland(s);
-  // --- path between consecutive nodes ---
-  ctx.lineCap='round';ctx.lineJoin='round';
-  for(let i=0;i<nodes.length-1;i++){
-    const a=nodes[i],b=nodes[i+1];
-    if(max(a.x,b.x)<vl||min(a.x,b.x)>vr)continue;
-    const traveled=(i+1)<=mw.to;
-    if(traveled){
-      ctx.save();ctx.shadowColor='rgba(255,200,60,0.8)';ctx.shadowBlur=8;
-      ctx.strokeStyle='rgba(255,206,70,0.95)';ctx.lineWidth=7;
-      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.restore();
-    }else{
-      ctx.strokeStyle='rgba(255,255,255,0.40)';ctx.lineWidth=5;ctx.setLineDash([2,9]);
-      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);
-    }
-  }
-  // --- stage signs (at each band's entrance node) ---
-  for(const n of nodes){
-    if(!n.stageStart||n.x<vl-80||n.x>vr+80)continue;
-    const st=STAGES[n.stage],tt=mapTint(st.theme),py=n.y-48;
-    fRRect(n.x-66,py,132,30,8,tt.d);
-    fRRect(n.x-66,py,132,30,8,'rgba(255,255,255,0.10)');
-    dText('STAGE '+(n.stage+1),9,n.x,py+11,'#ffe9a8',true,false,true);
-    dText(st.name,11,n.x,py+23,'#ffffff',true,false,false);
-  }
-  // --- nodes ---
-  for(const n of nodes){
-    if(n.x<vl||n.x>vr)continue;
-    const cleared=n.level<mw.to,target=n.level===mw.to;
-    const bossNode=(n.level%LEVELS_PER_STAGE)===(LEVELS_PER_STAGE-1);
-    const tt=mapTint(STAGES[n.stage].theme),r=bossNode?14:10;
-    fCir(n.x,n.y+2,r+2,'rgba(0,0,0,0.22)');
-    fCir(n.x,n.y,r,cleared?tt.g:(target?'#ffd24a':'#eef3f8'));
-    ctx.save();ctx.globalAlpha=0.4;fCir(n.x-r*0.3,n.y-r*0.35,r*0.5,'#fff');ctx.restore();
-    sCir(n.x,n.y,r,'rgba(0,0,0,0.35)',2);
-    if(cleared){ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.lineCap='round';
-      ctx.beginPath();ctx.moveTo(n.x-4,n.y);ctx.lineTo(n.x-1,n.y+4);ctx.lineTo(n.x+5,n.y-4);ctx.stroke();}
-    if(target){const pr=r+5+sin(mapAnim*0.13)*3;sCir(n.x,n.y,pr,'#ffd700',3);
-      if(mw.done&&mapDoneT<28){const a2=1-mapDoneT/28;ctx.save();ctx.globalAlpha=a2;sCir(n.x,n.y,r+10+(28-mapDoneT),'#fff',2);ctx.restore();}}
-    if(bossNode){dLine(n.x+r-1,n.y,n.x+r-1,n.y-14,'#fff',2);
-      fPoly([[n.x+r-1,n.y-14],[n.x+r+9,n.y-10],[n.x+r-1,n.y-6]],cleared?'#ff5252':(target?'#c0392b':'rgba(255,255,255,0.55)'));}
-    dText('L'+(n.level+1),9,n.x,n.y+r+9,cleared?'#fff':(target?'#7a4a00':'rgba(255,255,255,0.9)'),true,false,bossNode);
-  }
-  // --- avatar (world space) ---
+  ctx.drawImage(buildMapArt(),0,0);
+  const vl=mapCamX-(W/2)/mapScale-100,vr=mapCamX+(W/2)/mapScale+100;
+  // travelled route — bold red dashed ink over the faint base route, up to the avatar
+  ctx.save();ctx.strokeStyle='rgba(176,42,30,0.95)';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';ctx.setLineDash([5,6]);
+  ctx.beginPath();ctx.moveTo(nodes[0].x,nodes[0].y);
+  for(let i=1;i<=mw.from;i++)ctx.lineTo(nodes[i].x,nodes[i].y);
+  ctx.lineTo(mw.ax,mw.ay);
+  ctx.stroke();ctx.setLineDash([]);ctx.restore();
+  for(const n of nodes){if(n.x<vl||n.x>vr)continue;drawMapNode(n,mw);}
   drawMapAvatar(mw.ax,mw.ay,mw.seq==='walk',mw.leg,mw.faceDir);
-  ctx.restore(); // end camera
-
-  // --- screen-space UI ---
-  fRect(0,0,W,44,'rgba(0,0,0,0.34)');
-  dText('WORLD MAP',19,18,12,'#ffd700',false,true,true);
-  dText('Stage '+(toNode.stage+1)+' · '+STAGES[toNode.stage].name,13,160,16,'#fff',false,false,false);
-  dText('Cleared '+currentLevel+' / '+LEVELS.length,12,W-78,16,'rgba(255,255,255,0.8)',true,false,false);
-  if(mw.seq==='intro'){
-    ctx.save();ctx.globalAlpha=0.85;
-    dText('YOUR JOURNEY',26,W/2,H*0.5-150,'#ffffff',true,true,true);
-    dText(STAGES.length+' stages · '+LEVELS.length+' levels',14,W/2,H*0.5-118,'rgba(255,255,255,0.85)',true,false,true);
-    ctx.restore();
-  }else if(mw.seq==='done'){
-    ctx.save();ctx.globalAlpha=0.6+sin(mapAnim*0.12)*0.3;
-    const msg=mw.from===mw.to?'Journey complete — press any key':'Press any key for Level '+(mw.to+1);
-    dText(msg,15,W/2,H-30,'#fff',true,true,true);ctx.restore();
-  }else if(mw.seq==='walk'){
-    dText('Walking to the next level…',13,W/2,H-30,'rgba(255,255,255,0.8)',true,false,true);
-  }
+  ctx.restore();                                   // end camera
+  drawMapUI(mw,toNode);
 }
 
 // ===== GAME OVER =====
