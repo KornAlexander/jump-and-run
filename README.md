@@ -4,6 +4,15 @@ A vibe-coded jump & run game that runs inside a Microsoft Fabric notebook.
 
 📝 **Blog post:** [Jump & Run — Fabric for Kids](https://actionablereporting.com/2026/03/16/jump-and-run-fabric-for-kids/)
 
+## ▶️ Play online (desktop & mobile)
+
+**[kornalexander.github.io/jump-and-run](https://kornalexander.github.io/jump-and-run/)**
+
+Runs straight in the browser — no install. On phones and tablets it shows on-screen
+touch controls (D-pad + Jump + Attack) and prompts you to rotate to landscape.
+100 levels across 10 themed stages, each stage with its own distinct mix of layout
+archetypes (stairs, towers, islands, dragon ferries, ruins, cascades, causeways …).
+
 ## The Story
 
 My kids and I built this game over the weekend. It started as a **Python/Pygame** script, but I wanted to embed it into Microsoft Fabric — so I switched to **HTML5 Canvas**. Embedding was one line:
@@ -24,6 +33,7 @@ Since we were already in Fabric, I took it further: the game tracks stats (score
 | Space / Up / W | Jump |
 | F | Attack (Lightning / Sonic Wave) |
 | Stomp | Land on enemies from above |
+| Touch | On-screen D-pad + Jump + Attack buttons (mobile) |
 
 ## Files
 
@@ -31,7 +41,8 @@ Since we were already in Fabric, I took it further: the game tracks stats (score
 |------|-------------|
 | `jump_and_run python game basis.py` | Original Python/Pygame version |
 | `jump_and_run.html` | HTML5 Canvas version (embeddable in Fabric) |
-| `jump_and_run_v2.html` | V2 with audio, particles & smooth camera |
+| `jump_and_run_v2.html` | V2 — 100 levels, 12 layout archetypes, audio, particles, smooth camera, touch controls |
+| `index.html` | GitHub Pages entry point (same as `jump_and_run_v2.html`) |
 | `Jump and Run.ipynb` | Fabric notebook — play, save stats, view summary |
 
 ## Stats Pipeline
