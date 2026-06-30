@@ -248,8 +248,9 @@ function commitLevelJump(){
 function handleCheatKey(e){
   if(state!=='playing')return;
   // Level jump: press L, then type a number (e.g. L9 or L12), committed shortly after.
-  if(e.code==='KeyL'){lvlJumpBuf='';lvlJumpTimer=performance.now();return;}
-  if(lvlJumpTimer&&/^[0-9]$/.test(e.key)){lvlJumpBuf+=e.key;lvlJumpTimer=performance.now();
+  // NB: don't return on KeyL — the 'l' must still feed cheatBuf so "leben" can match.
+  if(e.code==='KeyL'){lvlJumpBuf='';lvlJumpTimer=performance.now();}
+  else if(lvlJumpTimer&&/^[0-9]$/.test(e.key)){lvlJumpBuf+=e.key;lvlJumpTimer=performance.now();
     if(lvlJumpBuf.length>=2)commitLevelJump();return;}
   // Lives cheat: type "leben".
   if(/^[a-zA-Z]$/.test(e.key)){cheatBuf=(cheatBuf+e.key.toLowerCase()).slice(-5);
